@@ -1,0 +1,7 @@
+.directory
+*.swp
+*.swo
+
+input/
+*.dat
+*.log
