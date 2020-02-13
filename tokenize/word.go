@@ -1,13 +1,11 @@
 package tokenize
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 
-	"golang.org/x/text/unicode/norm"
-
 	"github.com/sugarme/sermo/vocab"
+	"golang.org/x/text/unicode/norm"
 )
 
 type WordTokenizer struct {
@@ -15,9 +13,10 @@ type WordTokenizer struct {
 	Vocab vocab.Dict
 }
 
-func NewWordTokenizer() WordTokenizer {
+func NewWordTokenizer(lower bool, v vocab.Dict) WordTokenizer {
 	return WordTokenizer{
-		Lower: true,
+		Lower: lower,
+		Vocab: v,
 	}
 }
 
@@ -30,8 +29,6 @@ func NewWordTokenizer() WordTokenizer {
 func (w WordTokenizer) Tokenize(txt string) []string {
 	txt = clean(txt)
 	txt = padChinese(txt)
-
-	fmt.Printf("We are here \n")
 
 	toks := basicTokenize(txt, w.Lower)
 
@@ -118,13 +115,15 @@ func toLower(txt []string) []string {
 func splitWhitespace(txt string) []string {
 	var toks []string = strings.Split(txt, " ")
 
+	var resToks []string
+
 	// remove empty string
 	for _, tok := range toks {
 		if tok != "" {
-			toks = append(toks, tok)
+			resToks = append(resToks, tok)
 		}
 	}
-	return toks
+	return resToks
 
 }
 

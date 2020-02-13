@@ -14,39 +14,46 @@ type Tokenizer interface {
 }
 
 type tokenizer struct {
-	Vocab     vocab.Dict
+	// Vocab     vocab.Dict
 	Tokenizer Tokenizer
 }
 
 func (t tokenizer) Tokenize(text string) (tokens []string) {
-	return nil
+	return t.Tokenizer.Tokenize(text)
 }
 
 var defaultTokenizer = tokenizer{
-	Vocab:     vocab.New([]string{}),
-	Tokenizer: WordTokenizer{Lower: true},
+	// Vocab:     vocab.New([]string{}),
+	Tokenizer: NewWordTokenizer(true, vocab.New([]string{})),
+}
+
+func newTokenizer(lower bool) tokenizer {
+	return tokenizer{
+		// Vocab:     vocab.New([]string{}),
+		Tokenizer: NewWordTokenizer(lower, vocab.New([]string{})),
+	}
 }
 
 type Option func(*tokenizer)
 
-func WithVocab(vocab vocab.Dict) Option {
-	return func(o *tokenizer) {
-		o.Vocab = vocab
-	}
-}
+// func WithVocab(v vocab.Dict) Option {
+// return func(o *tokenizer) {
+// o.Vocab = v
+// }
+// }
 
-func WithWordpieceTokenizer(maxWordChars int, unknownToken string) Option {
+func WithWordpieceTokenizer(maxWordChars int, unknownToken string, v vocab.Dict) Option {
 	return func(o *tokenizer) {
 		o.Tokenizer = WordpieceTokenizer{
-			Basic:        WordTokenizer{Lower: true},
+			Basic:        NewWordTokenizer(true, v),
 			maxWordChars: maxWordChars,
 			unknownToken: unknownToken,
 		}
 	}
 }
 
-func NewTokenizer(opts ...Option) Tokenizer {
-	tkz := defaultTokenizer
+func NewTokenizer(lower bool, opts ...Option) Tokenizer {
+	tkz := newTokenizer(lower)
 
 	for _, o := range opts {
 		o(&tkz)

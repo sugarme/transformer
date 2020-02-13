@@ -35,8 +35,17 @@ func NewWordpieceTokenizer() WordpieceTokenizer {
 func (wp WordpieceTokenizer) Tokenize(txt string) []string {
 	// TODO: determine if utf8 conversion is necessary, per python impl
 	// txt = convert_to_unicode(txt)
-	var toks []string
+	var toks, resToks []string
 	toks = wp.Basic.Tokenize(txt)
+
+	for _, t := range toks {
+		resToks = append(resToks, wp.wordpieceTokenizer(t)...)
+	}
+	return resToks
+}
+
+func (wp WordpieceTokenizer) wordpieceTokenizer(txt string) []string {
+	var toks []string
 	for _, tok := range splitWhitespace(txt) {
 		if len(tok) > wp.maxWordChars {
 			toks = append(toks, wp.unknownToken)

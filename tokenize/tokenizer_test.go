@@ -21,7 +21,7 @@ func TestBasic(t *testing.T) {
 		{"no lower multi", false, " \tHeLLo!how  \n Are yoU?  ", []string{"HeLLo", "!", "how", "Are", "yoU", "?"}},
 		{"no lower single", false, "H\u00E9llo", []string{"H\u00E9llo"}},
 	} {
-		tkz := tokenize.NewWordTokenizer()
+		tkz := tokenize.NewTokenizer(test.lower)
 		toks := tkz.Tokenize(test.text)
 		if !reflect.DeepEqual(toks, test.tokens) {
 			t.Errorf("Test %s - Invalid Tokenization - Want: %v, Got: %v", test.name, test.tokens, toks)
@@ -31,6 +31,12 @@ func TestBasic(t *testing.T) {
 
 func TestWordpiece(t *testing.T) {
 	voc := vocab.New([]string{"[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"})
+
+	var options = []tokenize.Option{
+		tokenize.WithWordpieceTokenizer(tokenize.DefaultMaxWordChars, tokenize.DefaultUnknownToken, voc),
+		// tokenize.WithVocab(voc),
+	}
+
 	for i, test := range []struct {
 		text   string
 		tokens []string
@@ -42,9 +48,7 @@ func TestWordpiece(t *testing.T) {
 		//	{"unwantedX", []string{"[UNK]"}},
 		//{"unwantedX running", []string{"[UNK]", "runn", "##ing"}},
 	} {
-		tkz := tokenize.NewTokenizer(tokenize.WithWordpieceTokenizer(tokenize.DefaultMaxWordChars, tokenize.DefaultUnknownToken),
-			tokenize.WithVocab(voc),
-		)
+		tkz := tokenize.NewTokenizer(true, options...)
 		toks := tkz.Tokenize(test.text)
 		if !reflect.DeepEqual(toks, test.tokens) {
 			t.Errorf("Test %d - Invalid Tokenization - Want: %v, Got: %v", i, test.tokens, toks)
