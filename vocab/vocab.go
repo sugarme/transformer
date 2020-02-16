@@ -110,16 +110,3 @@ func (v *Dict) HasToken(token string) bool {
 func (v *Dict) Size() int {
 	return len(v.tokens)
 }
-
-// LongestSubstring returns the longest token that is a substring of the token
-func (v *Dict) LongestSubstring(token string) string {
-	// Greedy, optimize to trie if needed
-	for i := len(token); i > 0; i-- {
-		sub := token[:i]
-		if _, ok := v.tokens[sub]; ok {
-			return sub
-		}
-	}
-
-	return ""
-}

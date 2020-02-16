@@ -2,7 +2,6 @@ package tokenize
 
 import (
 	"fmt"
-	"strings"
 )
 
 // WordpieceTokenizer provides methods to break down and work on subwords
@@ -30,153 +29,59 @@ func NewWordpieceTokenizer() WordpieceTokenizer {
 	}
 }
 
-// // Tokenize segments text input into SUBWORD tokens using the supplied vocabulary
-// // NOTE: This implementation does not EXACTLY match the ref-impl and behaves slightly differently
-// // See https://github.com/google-research/bert/issues/763
-// func (wp WordpieceTokenizer) Tokenize(txt string) []string {
-// // TODO: determine if utf8 conversion is necessary, per python impl
-// // txt = convert_to_unicode(txt)
-// var toks, resToks []string
-// toks = wp.Basic.Tokenize(txt)
-//
-// for _, t := range toks {
-// resToks = append(resToks, wp.wordpieceTokenizer(t)...)
-// }
-// return resToks
-// }
-
-// func (wp WordpieceTokenizer) wordpieceTokenizer(txt string) []string {
-// var toks []string
-// for _, tok := range splitWhitespace(txt) {
-// if len(tok) > wp.maxWordChars {
-// toks = append(toks, wp.unknownToken)
-// continue
-// }
-//
-// wordTok := tok
-//
-// for len(tok) > 0 && tok != "##" {
-// var sub string
-//
-// if tok == wordTok {
-// // if tok not in vocab, unknown token
-// sub = wp.Basic.Vocab.LongestSubstring(tok)
-// if sub == "" {
-// toks = append(toks, wp.unknownToken)
-// break
-// }
-//
-// // Skip original token
-// sub = wp.Basic.Vocab.LongestSubstring(tok[:len(tok)-1])
-// toks = append(toks, sub)
-//
-// tok = fmt.Sprintf("##%s", wordTok[len(sub):])
-// fmt.Println(tok)
-//
-// } else {
-// sub = wp.Basic.Vocab.LongestSubstring(tok)
-//
-// if sub == "" {
-// toks = append(toks, wp.unknownToken)
-// break
-// }
-//
-// toks = append(toks, sub)
-// tok = fmt.Sprintf("##%s", tok[len(sub):])
-// fmt.Println(tok)
-// }
-// }
-// }
-//
-// return toks
-// }
-
+// Tokenize dices text input into SUBWORD tokens using the supplied vocabulary
 func (wp WordpieceTokenizer) Tokenize(txt string) []string {
+	var toks, subToks []string
+	toks = wp.Basic.Tokenize(txt)
 
-	// Greedy longest-match-first algorithm
-	// Ported from:
-	// https://github.com/huggingface/transformers/blob/1eec69a90007b8f4a7af10805dab4904ea5dea77/src/transformers/tokenization_bert.py#L436
-	v := wp.Basic.Vocab
-	var outputTokens []string
-
-	for _, tok := range splitWhitespace(txt) {
+	for _, tok := range toks {
 		if len(tok) > wp.maxWordChars {
-			outputTokens = append(outputTokens, wp.unknownToken)
+			subToks = append(subToks, wp.unknownToken)
 			continue
 		}
 
-		// if !v.HasToken(tok) {
-		// outputTokens = append(outputTokens, wp.unknownToken)
-		// continue
-		// }
+		for len(tok) > 0 && tok != "##" {
+			subTok := wp.LongestSubstring(tok)
 
-		// wordTok := tok
-
-		isBad := false
-		start := 0
-		var subTokens []string = []string{}
-
-		chars := strings.Split(tok, "")
-
-		// while loop 1
-		// for ok := true; ok; ok = (start < len(chars)) {
-		for start < len(chars) {
-			end := len(chars)
-			var curSubstr string
-
-			// while loop 2
-			// for ok := true; ok; ok = (start < end) {
-			for start < end {
-				substr := strings.Join(chars[start:end], "")
-				if start > 0 {
-					substr = fmt.Sprintf("##%v", substr)
-				}
-
-				if v.HasToken(substr) {
-					curSubstr = substr
-					break
-					// if substr == wordTok { // skip the word token if it is in wordpiece vocab, shouldn't we?
-					// end -= 1
-					// continue
-					// } else {
-					// curSubstr = substr
-					// break
-					// }
-				}
-
-				end -= 1
-
-			}
-
-			if curSubstr == "" {
-				isBad = true
+			if subTok == "" {
+				subToks = append(subToks, wp.unknownToken)
 				break
 			}
 
-			subTokens = append(subTokens, curSubstr)
+			subToks = append(subToks, subTok)
 
-			start = end
-
+			tok = fmt.Sprintf("##%s", tok[len(subTok):])
 		}
-
-		if isBad {
-			outputTokens = append(outputTokens, wp.unknownToken)
-		}
-
-		outputTokens = append(outputTokens, subTokens...)
 
 	}
 
-	return outputTokens
+	return subToks
 }
 
-// SetMaxWordChars will set the max chars for a word to be tokenized,
-// generally this should be congfigured through the FullTokenizer
+// SetMaxWordChars sets the max chars for a word to be tokenized,
 func (wp WordpieceTokenizer) SetMaxWordChars(c int) {
 	wp.maxWordChars = c
 }
 
-// SetUnknownToken will set the , generally this should be congfigured through the FullTokenizer
+// SetUnknownToken sets special string to be unknown token
 func (wp WordpieceTokenizer) SetUnknownToken(tok string) {
 	wp.unknownToken = tok
+}
+
+// longestSubstring returns the longest substring of an input token
+// by looking up internal vocabular dictionary
+// Algorithm: `longest prefix match`
+// Ref. https://en.wikipedia.org/wiki/Longest_prefix_match
+func (wp WordpieceTokenizer) LongestSubstring(token string) string {
+	v := wp.Basic.Vocab
+	// Greedy.
+	// TODO(if needed): trie (ref. https://en.wikipedia.org/wiki/Trie)
+	for i := len(token); i > 0; i-- {
+		sub := token[:i]
+		if v.HasToken(sub) {
+			return sub
+		}
+	}
+
+	return ""
 }

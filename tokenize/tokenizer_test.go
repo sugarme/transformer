@@ -31,12 +31,11 @@ func TestBasic(t *testing.T) {
 }
 
 func TestWordpiece(t *testing.T) {
-	// voc := vocab.New([]string{"[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", "do"})
-	voc, err := vocab.FromFile("../input/bert-base-uncased-vocab.txt")
-	// voc, err := vocab.FromFile("../input/vocab.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	voc := vocab.New([]string{"[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", "do"})
+	// voc, err := vocab.FromFile("vocab.txt")
+	// if err != nil {
+	// t.Fatal(err)
+	// }
 
 	fmt.Printf("Vocab Size: %v\n", voc.Size())
 	// idx, _ := voc.Index("##un")
@@ -54,10 +53,7 @@ func TestWordpiece(t *testing.T) {
 		{"", nil},
 		{"unwanted", []string{"un", "##want", "##ed"}},
 		{"unwanted running", []string{"un", "##want", "##ed", "runn", "##ing"}},
-		// {"doing something wrong-doing.", []string{"do", "##ing", "some", "thing", "wrong"}},
-		// TODO determine if these tests are correct
-		{"unwantedX", []string{"[UNK]"}},
-		{"we should not be going", []string{"we", "##went"}},
+		// {"unwantedX", []string{"[UNK]"}},
 		//{"unwantedX running", []string{"[UNK]", "runn", "##ing"}},
 	} {
 		tkz := tokenize.NewTokenizer(true, options...)
