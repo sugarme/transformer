@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	// "strings"
 )
 
 type Idx int32
@@ -98,15 +99,10 @@ func (v *Dict) HasIdx(idx Idx) bool {
 
 // HasToken returns true if vocab contains token
 func (v *Dict) HasToken(token string) bool {
-	found := false
-	for k, _ := range v.tokens {
-		if k == token {
-			found = true
-			break
-		}
-	}
 
-	return found
+	_, ok := v.tokens[token]
+
+	return ok
 
 }
 
@@ -117,12 +113,13 @@ func (v *Dict) Size() int {
 
 // LongestSubstring returns the longest token that is a substring of the token
 func (v *Dict) LongestSubstring(token string) string {
-	// Greedt, optimize to trie if needed
+	// Greedy, optimize to trie if needed
 	for i := len(token); i > 0; i-- {
 		sub := token[:i]
 		if _, ok := v.tokens[sub]; ok {
 			return sub
 		}
 	}
+
 	return ""
 }

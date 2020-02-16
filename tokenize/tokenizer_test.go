@@ -1,6 +1,7 @@
 package tokenize_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -30,7 +31,16 @@ func TestBasic(t *testing.T) {
 }
 
 func TestWordpiece(t *testing.T) {
-	voc := vocab.New([]string{"[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"})
+	// voc := vocab.New([]string{"[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", "do"})
+	voc, err := vocab.FromFile("../input/bert-base-uncased-vocab.txt")
+	// voc, err := vocab.FromFile("../input/vocab.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("Vocab Size: %v\n", voc.Size())
+	// idx, _ := voc.Index("##un")
+	// t.Fatal(fmt.Sprintf("Index of '##un': %v\n", idx))
 
 	var options = []tokenize.Option{
 		tokenize.WithWordpieceTokenizer(tokenize.DefaultMaxWordChars, tokenize.DefaultUnknownToken, voc),
@@ -44,14 +54,18 @@ func TestWordpiece(t *testing.T) {
 		{"", nil},
 		{"unwanted", []string{"un", "##want", "##ed"}},
 		{"unwanted running", []string{"un", "##want", "##ed", "runn", "##ing"}},
+		// {"doing something wrong-doing.", []string{"do", "##ing", "some", "thing", "wrong"}},
 		// TODO determine if these tests are correct
-		//	{"unwantedX", []string{"[UNK]"}},
+		{"unwantedX", []string{"[UNK]"}},
+		{"we should not be going", []string{"we", "##went"}},
 		//{"unwantedX running", []string{"[UNK]", "runn", "##ing"}},
 	} {
 		tkz := tokenize.NewTokenizer(true, options...)
+
 		toks := tkz.Tokenize(test.text)
+
 		if !reflect.DeepEqual(toks, test.tokens) {
-			t.Errorf("Test %d - Invalid Tokenization - Want: %v, Got: %v", i, test.tokens, toks)
+			t.Errorf("Test %d - Input: %s - Invalid Tokenization - Want: %v, Got: %v", i, test.text, test.tokens, toks)
 		}
 	}
 }
