@@ -1,40 +1,40 @@
 package normalizer
 
-import (
-// "fmt"
-)
+import ()
 
 type Normalizer interface {
-	Normalize()
+	Normalize(txt string) string
 }
 
 type normalizer struct {
 	Normalizer Normalizer
 }
 
-
-func newNormalizer() normalizer{
+func newNormalizer() normalizer {
 	return normalizer{
-		Normalizer: NewBasicNormalizer()
+		Normalizer: NewDefaultNormalizer(),
 	}
 }
 
+func (n normalizer) Normalize(txt string) string {
+
+	return n.Normalize(txt)
+}
 
 type Option func(*normalizer)
 
 func WithBertNormalizer() Option {
 	return func(o *normalizer) {
-		Normalizer: NewBertNormalizer()
+		NewBertNormalizer()
 	}
 }
 
 func NewNormalizer(opts ...Option) Normalizer {
 	nml := newNormalizer()
 
-	for _, o := range opts{
+	for _, o := range opts {
 		o(&nml)
 	}
 
 	return nml
 }
-
