@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	// "strings"
 )
@@ -22,6 +23,8 @@ func (idx Idx) Int32() int32 {
 type Dict struct {
 	tokens map[string]Idx
 }
+
+var DefaultWordpieceVocab Dict = setDefaultWordpieceVocab("vocab.txt")
 
 // New returns a vocab dict from the given tokens
 func New(tokens []string) Dict {
@@ -109,4 +112,13 @@ func (v *Dict) HasToken(token string) bool {
 // Size returns the size of the vocabulary
 func (v *Dict) Size() int {
 	return len(v.tokens)
+}
+
+func setDefaultWordpieceVocab(path string) Dict {
+	voc, err := FromFile("vocab.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return voc
 }
