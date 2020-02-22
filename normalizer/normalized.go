@@ -5,7 +5,6 @@ import (
 	// "fmt"
 	"log"
 	"strings"
-	"unicode/utf8"
 
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -118,6 +117,11 @@ func (n *Normalized) RangeOriginal(r []int) (string, error) {
 	return n.RangeOf(n.normalizedString.Original, r)
 }
 
+type RuneItem struct {
+	Rune rune
+	Pos  int
+}
+
 // Transform applies transformations to the current normalized version, updating the current
 // alignments with the new ones.
 // This method expect an Iterator yielding each char of the new normalized string
@@ -132,9 +136,27 @@ func (n *Normalized) RangeOriginal(r []int) (string, error) {
 // `change` should never be more than `1`. If multiple chars are added, each of
 // them has a `change` of `1`, but more doesn't make any sense.
 // We treat any value above `1` as `1`.
-func (n *Normalized) Transform(iter norm.Iter, initialOffset int) {
+func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
 	offset := 0
 	remainingOffset := initialOffset
+
+	for i, item := range runeItems {
+		var changes int
+
+		if remainingOffset != 0 {
+			changes = item.Pos - remainingOffset
+			remainingOffset = 0
+		} else {
+			changes = item.Pos
+		}
+
+		var uof int
+		if offset < 0 {
+			uof = -offset
+		} else {
+			uof = offset
+		}
+	}
 
 }
 
@@ -145,11 +167,11 @@ func (n *Normalized) NFD() {
 		log.Fatal(err)
 	}
 
-	var iter norm.Iter
+	var items []RuneItem
 
-	iter.InitString(norm.NFD, newNormalized)
-
-	n.Transform(iter, 0)
+	for i, r := range newNormalized {
+		items = append(items, RuneItem{Rune: r, Pos: i})
+	}
 
 }
 
