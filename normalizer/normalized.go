@@ -139,6 +139,10 @@ type RuneItem struct {
 func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
 	offset := 0
 	remainingOffset := initialOffset
+	var (
+		newNormalizedRunes []rune
+		newAligns          []Alignment
+	)
 
 	for i, item := range runeItems {
 		var changes int
@@ -156,7 +160,80 @@ func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
 		} else {
 			uof = offset
 		}
-	}
+
+		// A positive offset means we added `characters`. So we need to remove this offset from
+		// the current index to find out the previous id.
+		var idx int
+
+		switch os := offset; {
+		case os < 0:
+			idx = i + uof
+		case os >= 0:
+			idx = i + uof
+		}
+
+		var align Alignment
+
+		switch c := changes; {
+		// Newly added `character`
+		case c > 0:
+			offset += 1
+			if idx < 1 {
+				align = Alignment{
+					Pos:     0,
+					Changes: 0,
+				}
+			}
+			// Get alignment from previous index
+			align = n.normalizedString.Alignments[idx-1]
+
+		// No changes
+		case c == 0:
+			align = n.normalizedString.Alignments[idx]
+
+		// Some `characters` were removed. We merge our range with one from the
+		// removed `characters` as the new alignment
+		case c < 0:
+			var uch = -changes
+			offset += changes
+			aligns := n.normalizedString.Alignments[idx:(idx + uch)]
+
+			// Find max, min from this slice
+			// TODO: improve algorithm? gonum?
+			var (
+				min int = 0
+				max int = 0
+			)
+			for _, a := range aligns {
+				if a.Changes < min {
+					min = a.Changes
+				}
+				if a.Pos < min {
+					min = a.Pos
+				}
+
+				if max < a.Changes {
+					max = a.Changes
+				}
+
+				if max < a.Pos {
+					max = a.Pos
+				}
+			}
+
+			align = Alignment{
+				Pos:     min,
+				Changes: max,
+			}
+		} // end of Switch block
+
+		newAligns = append(newAligns, align)
+		newNormalizedRunes = append(newNormalizedRunes, item.Rune)
+
+	} // end of For-Range block
+
+	n.normalizedString.Alignments = newAligns
+	n.normalizedString.Normalized = string(newNormalizedRunes)
 
 }
 
