@@ -4,7 +4,7 @@ import (
 	"errors"
 	// "fmt"
 	"log"
-	"strings"
+	// "strings"
 
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -20,9 +20,9 @@ type NormalizedString struct {
 	Alignments []Alignment
 }
 
-// Alignment map normalized string to original one
-// Pos: the position in the modified string and
-// Changes: representing the number (size) of insertions or deletions
+// Alignment maps normalized string to original one using `rune` (Unicode code point)
+// Pos: the rune position in the modified (normalized) string and
+// Changes: representing the number (size) of inserted/deleted runes from original string
 type Alignment struct {
 	Pos     int
 	Changes int
@@ -34,11 +34,12 @@ type Normalized struct {
 	normalizedString NormalizedString
 }
 
-// func (n Normalized) NewFrom(s string) NormalizedString {
+// NewNormalizedFrom creates a Normalized instance from string input
 func NewNormalizedFrom(s string) Normalized {
 	var alignments []Alignment
-	chars := strings.Split(s, "")
-	for i, _ := range chars {
+
+	// Break down string to slice of runes
+	for i, _ := range []rune(s) {
 		alignments = append(alignments, Alignment{
 			Pos:     i,
 			Changes: i + 1,
@@ -118,22 +119,22 @@ func (n *Normalized) RangeOriginal(r []int) (string, error) {
 }
 
 type RuneItem struct {
-	Rune rune
-	Pos  int
+	RuneVal rune
+	Pos     int
 }
 
 // Transform applies transformations to the current normalized version, updating the current
 // alignments with the new ones.
-// This method expect an Iterator yielding each char of the new normalized string
+// This method expect an Iterator yielding each rune of the new normalized string
 // with a `change` interger size equals to:
-//   - `1` if this is a new char
-//   - `-N` if the char is right before N removed chars
-//   - `0` if this char represents the old one (even if changed)
-// Since it is possible that the normalized string doesn't include some of the characters at
+//   - `1` if this is a new rune
+//   - `-N` if the char is right before N removed runes
+//   - `0` if this rune represents the old one (even if changed)
+// Since it is possible that the normalized string doesn't include some of the `characters` (runes) at
 // the beginning of the original one, we need an `initial_offset` which represents the number
-// of removed chars at the very beginning.
+// of removed runes at the very beginning.
 //
-// `change` should never be more than `1`. If multiple chars are added, each of
+// `change` should never be more than `1`. If multiple runes are added, each of
 // them has a `change` of `1`, but more doesn't make any sense.
 // We treat any value above `1` as `1`.
 func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
@@ -143,6 +144,20 @@ func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
 		newNormalizedRunes []rune
 		newAligns          []Alignment
 	)
+
+	// E.g. string `élégant`
+	// Before NFD():  [{233 0} {108 1} {233 2} {103 3} {97 4} {110 5} {116 6}]
+	// After NFD(): 	[{101 0} {769 1} {108 2} {101 3} {769 4} {103 5} {97 6} {110 7} {116 8}]
+	// New Alignments:
+	// {0, 1},
+	// {0, 1},
+	// {1, 2},
+	// {2, 3},
+	// {2, 3},
+	// {3, 4},
+	// {4, 5},
+	// {5, 6},
+	// {6, 7},
 
 	for i, item := range runeItems {
 		var changes int
@@ -154,27 +169,14 @@ func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
 			changes = item.Pos
 		}
 
-		var uof int
-		if offset < 0 {
-			uof = -offset
-		} else {
-			uof = offset
-		}
-
-		// A positive offset means we added `characters`. So we need to remove this offset from
-		// the current index to find out the previous id.
-		var idx int
-
-		switch os := offset; {
-		case os < 0:
-			idx = i + uof
-		case os >= 0:
-			idx = i + uof
-		}
+		// NOTE: offset can be negative or positive value
+		// A positive offset means we added `characters` (runes).
+		// So we need to remove this offset from the current index to find out the previous id.
+		idx := i - offset
 
 		var align Alignment
 
-		switch c := changes; {
+		switch c := changes; { // Recall: Using switch with no condition. Ref: https://yourbasic.org/golang/switch-statement/
 		// Newly added `character`
 		case c > 0:
 			offset += 1
@@ -228,12 +230,13 @@ func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
 		} // end of Switch block
 
 		newAligns = append(newAligns, align)
-		newNormalizedRunes = append(newNormalizedRunes, item.Rune)
+		newNormalizedRunes = append(newNormalizedRunes, item.RuneVal)
 
 	} // end of For-Range block
 
 	n.normalizedString.Alignments = newAligns
 	n.normalizedString.Normalized = string(newNormalizedRunes)
+	// n.normalizedString.Normalized = strings.Join(newNormalizedRunes, "")
 
 }
 
@@ -245,10 +248,29 @@ func (n *Normalized) NFD() {
 	}
 
 	var items []RuneItem
+	var runeVals []rune
 
-	for i, r := range newNormalized {
-		items = append(items, RuneItem{Rune: r, Pos: i})
+	// FOR testing Only.
+	// TODO: comment out
+	/*
+	 *   for i, r := range []rune(n.normalizedString.Normalized) {
+	 *     items = append(items, RuneItem{RuneVal: r, Pos: i})
+	 *   }
+	 *   log.Fatal(items)
+	 *  */
+
+	// By default, range iterates string to bytes
+	// We need to convert string to runes before iterating
+	for i, r := range []rune(newNormalized) {
+		items = append(items, RuneItem{RuneVal: r, Pos: i})
+		runeVals = append(runeVals, r)
 	}
+
+	// FOR testing Only.
+	// TODO: comment out
+	// log.Fatal(items)
+
+	n.Transform(items, 0)
 
 }
 
