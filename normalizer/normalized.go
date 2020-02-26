@@ -2,9 +2,9 @@ package normalizer
 
 import (
 	"errors"
-	// "fmt"
+	"fmt"
 	"log"
-	// "strings"
+	"strings"
 
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -60,6 +60,10 @@ func NewNormalizedFrom(s string) Normalized {
 
 func (n *Normalized) Get() NormalizedString {
 	return n.normalizedString
+}
+
+func (n *Normalized) GetNormalized() string {
+	return n.normalizedString.Normalized
 }
 
 func (n *Normalized) GetOriginal() string {
@@ -118,9 +122,9 @@ func (n *Normalized) RangeOriginal(r []int) (string, error) {
 	return n.RangeOf(n.normalizedString.Original, r)
 }
 
-type RuneItem struct {
-	RuneVal rune
-	Pos     int
+type ChangeMap struct {
+	RuneVal string
+	Changes int
 }
 
 // Transform applies transformations to the current normalized version, updating the current
@@ -137,12 +141,12 @@ type RuneItem struct {
 // `change` should never be more than `1`. If multiple runes are added, each of
 // them has a `change` of `1`, but more doesn't make any sense.
 // We treat any value above `1` as `1`.
-func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
+func (n *Normalized) Transform(m []ChangeMap, initialOffset int) {
 	offset := 0
 	remainingOffset := initialOffset
 	var (
-		newNormalizedRunes []rune
-		newAligns          []Alignment
+		runeVals  []string
+		newAligns []Alignment
 	)
 
 	// E.g. string `élégant`
@@ -159,14 +163,14 @@ func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
 	// {5, 6},
 	// {6, 7},
 
-	for i, item := range runeItems {
+	for i, item := range m {
 		var changes int
 
 		if remainingOffset != 0 {
-			changes = item.Pos - remainingOffset
+			changes = item.Changes - remainingOffset
 			remainingOffset = 0
 		} else {
-			changes = item.Pos
+			changes = item.Changes
 		}
 
 		// NOTE: offset can be negative or positive value
@@ -230,49 +234,63 @@ func (n *Normalized) Transform(runeItems []RuneItem, initialOffset int) {
 		} // end of Switch block
 
 		newAligns = append(newAligns, align)
-		newNormalizedRunes = append(newNormalizedRunes, item.RuneVal)
+		runeVals = append(runeVals, item.RuneVal)
 
 	} // end of For-Range block
 
 	n.normalizedString.Alignments = newAligns
-	n.normalizedString.Normalized = string(newNormalizedRunes)
-	// n.normalizedString.Normalized = strings.Join(newNormalizedRunes, "")
+	n.normalizedString.Normalized = strings.Join(runeVals, "")
 
 }
 
 func (n *Normalized) NFD() {
-	tf := transform.Chain(norm.NFD)
-	newNormalized, _, err := transform.String(tf, n.normalizedString.Normalized)
-	if err != nil {
-		log.Fatal(err)
+
+	var changeMap []ChangeMap
+
+	// Create slice of (char, changes) to map changing
+	// if added (inserted) rune, changes = 1; `-N` if char
+	// right before N removed chars
+	// changes = 0 if this represents the old one (even if changed)
+
+	// Iterating over string and apply tranformer (NFD). One character at a time
+	// A `character` is defined as:
+	// - a sequence of runes that starts with a starter,
+	// - a rune that does not modify or combine backwards with any other rune,
+	// - followed by possibly empty sequence of non-starters, that is, runes that do (typically accents).
+	// We will iterate over string and apply transformer to each char
+	// If a char composes of one rune, there no changes
+	// If more than one rune, first is no change, the rest is 1 changes
+	var it norm.Iter
+	it.InitString(norm.NFD, n.normalizedString.Normalized)
+	for !it.Done() {
+		runes := []rune(string(it.Next()))
+
+		for i, r := range runes {
+
+			switch i := i; {
+			case i == 0:
+				changeMap = append(changeMap, ChangeMap{
+					RuneVal: fmt.Sprintf("%+q", r),
+					Changes: 0,
+				})
+			case i > 0:
+				changeMap = append(changeMap, ChangeMap{
+					RuneVal: fmt.Sprintf("%+q", r),
+					Changes: 1,
+				})
+			}
+		}
+
 	}
 
-	var items []RuneItem
-	var runeVals []rune
-
-	// FOR testing Only.
-	// TODO: comment out
-	/*
-	 *   for i, r := range []rune(n.normalizedString.Normalized) {
-	 *     items = append(items, RuneItem{RuneVal: r, Pos: i})
-	 *   }
-	 *   log.Fatal(items)
-	 *  */
-
-	// By default, range iterates string to bytes
-	// We need to convert string to runes before iterating
-	for i, r := range []rune(newNormalized) {
-		items = append(items, RuneItem{RuneVal: r, Pos: i})
-		runeVals = append(runeVals, r)
-	}
-
-	// FOR testing Only.
-	// TODO: comment out
-	// log.Fatal(items)
-
-	n.Transform(items, 0)
+	n.Transform(changeMap, 0)
 
 }
+
+// TODO: NFC
+// TODO: NFKD
+// TODO: NFKC
+// TODO: Filter
 
 func (n *Normalized) RemoveAccents() {
 
