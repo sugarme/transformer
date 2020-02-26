@@ -3,6 +3,7 @@ package normalizer_test
 import (
 	// "fmt"
 	"reflect"
+	// "strings"
 	"testing"
 	"unicode"
 
@@ -106,6 +107,23 @@ func TestNormalized_NFD(t *testing.T) {
 		t.Errorf("Normalized Before NFD: %v\n", beforeNormalized)
 		t.Errorf("Normalized After NFD: %v\n", afterNormalized)
 
+		t.Errorf("Want: %v\n", want)
+		t.Errorf("Got: %v\n", got)
+	}
+
+}
+
+func TestNormalized_Filter(t *testing.T) {
+	gotN := normalizer.NewNormalizedFrom("élégant")
+
+	gotN.Filter(func(r rune) bool {
+		return r == '\u0301' // single quote for rune literal
+	})
+
+	got := gotN.Get().Normalized
+	want := "élégant"
+
+	if !reflect.DeepEqual(want, got) {
 		t.Errorf("Want: %v\n", want)
 		t.Errorf("Got: %v\n", got)
 	}

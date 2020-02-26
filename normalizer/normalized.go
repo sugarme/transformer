@@ -287,6 +287,25 @@ func (n *Normalized) NFD() {
 
 }
 
+func (n *Normalized) Filter(f func(r rune) bool) {
+	s := n.normalizedString.Normalized
+	b := make([]byte, len(s))
+
+	tf := transform.Chain(norm.NFD, transform.RemoveFunc(f), norm.NFC)
+
+	_, _, err := tf.Transform(b, []byte(s), true)
+	if err != nil {
+		// log.Fatal(err)
+		fmt.Println(err)
+	}
+
+	// TODO: either iterate over string and apply filtering for each rune
+	// and create changes or tranform then compare result with origin string
+	// oRunes := []rune(s)
+	// fRunes := []rune(string(b))
+
+}
+
 // TODO: NFC
 // TODO: NFKD
 // TODO: NFKC
@@ -295,11 +314,10 @@ func (n *Normalized) NFD() {
 func (n *Normalized) RemoveAccents() {
 
 	s := n.normalizedString.Normalized
-	b := make([]byte, len([]rune(s)))
+	b := make([]byte, len(s))
 
 	tf := transform.Chain(norm.NFD, transform.RemoveFunc(isMn), norm.NFC)
 
-	// TODO: use Tranform and implement chaing to Alignments
 	_, _, err := tf.Transform(b, []byte(s), true)
 	if err != nil {
 		log.Fatal(err)

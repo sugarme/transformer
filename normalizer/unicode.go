@@ -76,3 +76,7 @@ func (un UnicodeNormalizer) ToLower(s string) string {
 	return strings.ToLower(s)
 
 }
+
+func isFiltered(r, filtered rune) bool {
+	return r == filtered
+}
