@@ -116,12 +116,24 @@ func TestNormalized_NFD(t *testing.T) {
 func TestNormalized_Filter(t *testing.T) {
 	gotN := normalizer.NewNormalizedFrom("élégant")
 
-	gotN.Filter(func(r rune) bool {
-		return r == '\u0301' // single quote for rune literal
-	})
+	// gotN.Filter(func(r rune) bool {
+	// return r == '\u0301' // single quote for rune literal
+	// })
 
-	got := gotN.Get().Normalized
-	want := "élégant"
+	gotN.Filter('é')
+	want := []normalizer.Alignment{
+		{0, 1},
+		{1, 2},
+		{2, 3},
+		{3, 4},
+		{4, 5},
+		{5, 6},
+		{6, 7},
+	}
+	got := gotN.Get().Alignments
+
+	// got := gotN.Get().Normalized
+	// want := "élégant"
 
 	if !reflect.DeepEqual(want, got) {
 		t.Errorf("Want: %v\n", want)

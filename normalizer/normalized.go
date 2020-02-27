@@ -141,6 +141,7 @@ type ChangeMap struct {
 // `change` should never be more than `1`. If multiple runes are added, each of
 // them has a `change` of `1`, but more doesn't make any sense.
 // We treat any value above `1` as `1`.
+// func (n *Normalized) Transform(m []ChangeMap, initialOffset int) {
 func (n *Normalized) Transform(m []ChangeMap, initialOffset int) {
 	offset := 0
 	remainingOffset := initialOffset
@@ -202,30 +203,20 @@ func (n *Normalized) Transform(m []ChangeMap, initialOffset int) {
 		case c < 0:
 			var uch = -changes
 			offset += changes
-			aligns := n.normalizedString.Alignments[idx:(idx + uch)]
+			aligns := n.normalizedString.Alignments[idx:(idx + uch + 1)]
 
 			// Find max, min from this slice
 			// TODO: improve algorithm? gonum?
 			var (
-				min int = 0
-				max int = 0
+				min, max int
+				pool     []int
 			)
 			for _, a := range aligns {
-				if a.Changes < min {
-					min = a.Changes
-				}
-				if a.Pos < min {
-					min = a.Pos
-				}
-
-				if max < a.Changes {
-					max = a.Changes
-				}
-
-				if max < a.Pos {
-					max = a.Pos
-				}
+				pool = append(pool, a.Changes)
+				pool = append(pool, a.Pos)
 			}
+
+			min, max = utils.MinMax(pool)
 
 			align = Alignment{
 				Pos:     min,
@@ -284,25 +275,62 @@ func (n *Normalized) NFD() {
 	}
 
 	n.Transform(changeMap, 0)
-
 }
 
-func (n *Normalized) Filter(f func(r rune) bool) {
+func (n *Normalized) Filter(fr rune) {
+
 	s := n.normalizedString.Normalized
-	b := make([]byte, len(s))
+	var changeMap []ChangeMap
 
-	tf := transform.Chain(norm.NFD, transform.RemoveFunc(f), norm.NFC)
+	// Fisrt, reverse the string
+	var oRunes []rune
 
-	_, _, err := tf.Transform(b, []byte(s), true)
-	if err != nil {
-		// log.Fatal(err)
-		fmt.Println(err)
+	// Then, iterate over string and apply filtering
+	var it norm.Iter
+	it.InitString(norm.NFC, s)
+
+	for !it.Done() {
+		runes := []rune(string(it.Next()))
+
+		oRunes = append(oRunes, runes...)
+
 	}
 
-	// TODO: either iterate over string and apply filtering for each rune
-	// and create changes or tranform then compare result with origin string
-	// oRunes := []rune(s)
-	// fRunes := []rune(string(b))
+	revRunes := make([]rune, 0)
+	for i := len(oRunes) - 1; i >= 0; i-- {
+		revRunes = append(revRunes, oRunes[i])
+	}
+
+	var removed int = 0
+	for _, r := range revRunes {
+		// fmt.Printf("rune: %+q - filtered rune: %+q\n", r, fr)
+		if r == fr {
+			removed += 1
+		} else {
+			if removed > 0 {
+				changeMap = append(changeMap, ChangeMap{
+					RuneVal: fmt.Sprintf("%+q", r),
+					Changes: -removed,
+				})
+				removed = 0
+			} else if removed == 0 {
+				changeMap = append(changeMap, ChangeMap{
+					RuneVal: fmt.Sprintf("%+q", r),
+					Changes: 0,
+				})
+			}
+		}
+	}
+
+	// Flip back changeMap
+	var unrevMap []ChangeMap
+	for i := len(changeMap) - 1; i >= 0; i-- {
+		unrevMap = append(unrevMap, changeMap[i])
+	}
+
+	fmt.Printf("%v\n", unrevMap)
+
+	n.Transform(unrevMap, removed)
 
 }
 
