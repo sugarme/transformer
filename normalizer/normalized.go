@@ -236,8 +236,11 @@ func (n *Normalized) Transform(m []ChangeMap, initialOffset int) {
 
 func (n *Normalized) NFD() {
 
-	var changeMap []ChangeMap
-
+	s := n.normalizedString.Normalized
+	var (
+		changeMap []ChangeMap
+		it        norm.Iter
+	)
 	// Create slice of (char, changes) to map changing
 	// if added (inserted) rune, changes = 1; `-N` if char
 	// right before N removed chars
@@ -251,8 +254,7 @@ func (n *Normalized) NFD() {
 	// We will iterate over string and apply transformer to each char
 	// If a char composes of one rune, there no changes
 	// If more than one rune, first is no change, the rest is 1 changes
-	var it norm.Iter
-	it.InitString(norm.NFD, n.normalizedString.Normalized)
+	it.InitString(norm.NFD, s)
 	for !it.Done() {
 		runes := []rune(string(it.Next()))
 
@@ -272,6 +274,125 @@ func (n *Normalized) NFD() {
 			}
 		}
 
+	}
+
+	n.Transform(changeMap, 0)
+}
+
+func (n *Normalized) NFC() {
+
+	var (
+		changeMap []ChangeMap
+		it        norm.Iter
+	)
+
+	// First, determine which normal form the string is
+	s := n.normalizedString.Normalized
+
+	isNFC := norm.Form.IsNormalString(norm.NFC, s)
+	// isNFKC := norm.Form.IsNormalString(norm.NFKC, s)
+	// isNFD := norm.Form.IsNormalString(norm.NFD, s)
+	// isNFKD := norm.Form.IsNormalString(norm.NFKD, s)
+
+	if isNFC {
+		return // no need to normalize
+	}
+
+	// Assuming the string is in decomposing form
+	it.InitString(norm.NFD, s)
+
+	for !it.Done() {
+		runes := []rune(string(it.Next()))
+		fmt.Printf("%+q", runes)
+
+		if len(runes) == 1 {
+			changeMap = append(changeMap, ChangeMap{
+				RuneVal: fmt.Sprintf("%+q", runes),
+				Changes: 0,
+			})
+		} else if len(runes) > 1 {
+			changeMap = append(changeMap, ChangeMap{
+				RuneVal: fmt.Sprintf("%+q", runes),
+				Changes: -1,
+			})
+		}
+	}
+
+	n.Transform(changeMap, 0)
+}
+
+func (n *Normalized) NFKD() {
+
+	s := n.normalizedString.Normalized
+	isNFKD := norm.Form.IsNormalString(norm.NFKD, s)
+	if isNFKD {
+		return // no need to normalize
+	}
+
+	var (
+		changeMap []ChangeMap
+		it        norm.Iter
+	)
+
+	it.InitString(norm.NFKD, s)
+	for !it.Done() {
+		runes := []rune(string(it.Next()))
+
+		for i, r := range runes {
+
+			switch i := i; {
+			case i == 0:
+				changeMap = append(changeMap, ChangeMap{
+					RuneVal: fmt.Sprintf("%+q", r),
+					Changes: 0,
+				})
+			case i > 0:
+				changeMap = append(changeMap, ChangeMap{
+					RuneVal: fmt.Sprintf("%+q", r),
+					Changes: 1,
+				})
+			}
+		}
+
+	}
+
+	n.Transform(changeMap, 0)
+}
+
+func (n *Normalized) NFKC() {
+
+	var (
+		changeMap []ChangeMap
+		it        norm.Iter
+	)
+
+	// First, determine which normal form the string is
+	s := n.normalizedString.Normalized
+
+	isNFKC := norm.Form.IsNormalString(norm.NFKC, s)
+
+	if isNFKC {
+		return // no need to normalize
+	}
+
+	// Assuming the string is in decomposing form
+	it.InitString(norm.NFKD, n.normalizedString.Normalized)
+
+	for !it.Done() {
+		runes := []rune(string(it.Next()))
+		fmt.Printf("%+q", runes)
+
+		if len(runes) == 1 {
+			changeMap = append(changeMap, ChangeMap{
+				RuneVal: fmt.Sprintf("%+q", runes),
+				Changes: 0,
+			})
+		} else if len(runes) > 1 {
+			changeMap = append(changeMap, ChangeMap{
+				RuneVal: fmt.Sprintf("%+q", runes),
+				Changes: -1,
+			})
+		}
 	}
 
 	n.Transform(changeMap, 0)
@@ -334,11 +455,6 @@ func (n *Normalized) Filter(fr rune) {
 
 }
 
-// TODO: NFC
-// TODO: NFKD
-// TODO: NFKC
-// TODO: Filter
-
 func (n *Normalized) RemoveAccents() {
 
 	s := n.normalizedString.Normalized
@@ -354,3 +470,36 @@ func (n *Normalized) RemoveAccents() {
 	n.normalizedString.Normalized = string(b)
 
 }
+
+// TODO:
+// Map maps rune in string
+func (n *Normalized) Map() {}
+
+// ForEach calls func for each rune in string
+func (n *Normalized) ForEach() {}
+
+// Lowercase transforms string to lowercase
+func (n *Normalized) Lowercase() {}
+
+// Uppercase transforms string to uppercase
+func (n *Normalized) Uppercase() {}
+
+// SplitOff truncates string with the range [at, len).
+// remaining string will contain the range [0, at).
+// The provided `at` indexes on `char` not bytes.
+func (n *Normalized) SplitOff() {}
+
+// MergeWith merges an input string with existing one
+func (n *Normalized) MergeWith() {}
+
+// LStrip removes leading spaces
+func (n *Normalized) LStrip() {}
+
+// RStrip removes trailing spaces
+func (n *Normalized) RStrip() {}
+
+// Strip remove leading and trailing spaces
+func (n *Normalized) Strip() {}
+
+// lrstrip - Private func to help with exposed strip funcs
+func (n *Normalized) lrstrip() {}

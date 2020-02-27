@@ -113,6 +113,43 @@ func TestNormalized_NFD(t *testing.T) {
 
 }
 
+func TestNormalized_NFC(t *testing.T) {
+
+	want := []normalizer.Alignment{
+		{0, 1},
+		{0, 1},
+		{1, 2},
+		{2, 3},
+		{2, 3},
+		{3, 4},
+		{4, 5},
+		{5, 6},
+		{6, 7},
+	}
+
+	gotN := normalizer.NewNormalizedFrom("e\u0301le\u0301gant")
+	// gotN := normalizer.NewNormalizedFrom("élégantÅ")
+	beforeAlignments := gotN.Get().Alignments
+	beforeNormalized := gotN.Get().Normalized
+	gotN.NFC()
+	afterAlignments := gotN.Get().Alignments
+	afterNormalized := gotN.Get().Normalized
+
+	got := gotN.Get().Alignments
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Alignments Before NFC: %v\n", beforeAlignments)
+		t.Errorf("Alignments After NFC: %v\n", afterAlignments)
+
+		t.Errorf("Normalized Before NFC: %v\n", beforeNormalized)
+		t.Errorf("Normalized After NFC: %v\n", afterNormalized)
+
+		t.Errorf("Want: %v\n", want)
+		t.Errorf("Got: %v\n", got)
+	}
+
+}
+
 func TestNormalized_Filter(t *testing.T) {
 	gotN := normalizer.NewNormalizedFrom("élégant")
 
