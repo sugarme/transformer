@@ -3,7 +3,7 @@ package normalizer
 import ()
 
 type Normalizer interface {
-	Normalize(normalized Normalized) error
+	Normalize(normalized Normalized) (Normalized, error)
 }
 
 type normalizer struct {
@@ -16,9 +16,9 @@ func newNormalizer() normalizer {
 	}
 }
 
-func (n normalizer) Normalize(normalized Normalized) error {
+func (n normalizer) Normalize(normalized Normalized) (Normalized, error) {
 
-	return nil
+	return normalized, nil
 }
 
 type Option func(*normalizer)
@@ -28,6 +28,11 @@ func WithBertNormalizer() Option {
 		NewBertNormalizer()
 	}
 }
+
+//TODO: UnicodeNormalizer
+// func WithUnicodeNormalizer() Option {
+//
+// }
 
 func NewNormalizer(opts ...Option) Normalizer {
 	nml := newNormalizer()

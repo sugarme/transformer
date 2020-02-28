@@ -641,3 +641,7 @@ func (n *Normalized) lrstrip(left, right bool) {
 	}
 
 }
+
+func isMn(r rune) bool {
+	return unicode.Is(unicode.Mn, r) // Mn: nonspacing marks
+}

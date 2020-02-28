@@ -16,51 +16,49 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"regexp"
-	"strings"
 )
 
 type DefaultNormalizer struct {
-	Lower           bool // to lowercase
-	ExtraWhitespace bool // remove extra-whitespaces
-	Contraction     bool // expand contraction
+	Lower bool // to lowercase
+	Strip bool // trim leading and trailing whitespaces
+	// ExtraWhitespace bool // remove extra-whitespaces
+	// Contraction     bool // expand contraction
 }
 
 type DefaultOption func(*DefaultNormalizer)
 
-func WithContractionExpansion() DefaultOption {
-	return func(o *DefaultNormalizer) {
-		o.Contraction = true
+/*
+ * func WithContractionExpansion() DefaultOption {
+ *   return func(o *DefaultNormalizer) {
+ *     o.Contraction = true
+ *   }
+ * }
+ *  */
+
+func (dn DefaultNormalizer) Normalize(n Normalized) (Normalized, error) {
+
+	if dn.Lower {
+		n.Lowercase()
 	}
 
-}
+	if dn.Strip {
+		n.Strip()
+	}
 
-func (dn DefaultNormalizer) Normalize(normalized Normalized) error {
-
-	// if dn.Lower {
-	// txt = toLowercase(txt)
-	// }
-	//
-	// if dn.ExtraWhitespace {
-	// txt = removeExtraWhitespace(txt)
-	// }
-	//
 	// if dn.Contraction {
 	// txt = expandContraction(txt)
 	// }
-	//
-	// return txt
 
-	return nil
+	return n, nil
 
 }
 
 func NewDefaultNormalizer(opts ...DefaultOption) DefaultNormalizer {
 
 	dn := DefaultNormalizer{
-		Lower:           true,
-		ExtraWhitespace: true,
-		Contraction:     false,
+		Lower: true,
+		Strip: true,
+		// Contraction:     false,
 	}
 
 	for _, o := range opts {
@@ -71,16 +69,7 @@ func NewDefaultNormalizer(opts ...DefaultOption) DefaultNormalizer {
 
 }
 
-func toLowercase(txt string) string {
-	return strings.ToLower(txt)
-}
-
-func removeExtraWhitespace(txt string) string {
-	space := regexp.MustCompile(`\s+`)
-	return space.ReplaceAllString(txt, " ")
-
-}
-
+// TODO: move this func to `normalized` file
 func expandContraction(txt string) string {
 	var cMap map[string]string
 	cMap, err := loadContractionMap()

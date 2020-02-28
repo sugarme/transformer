@@ -1,82 +1,41 @@
 package normalizer
 
 import (
-	"strings"
-	"unicode"
-
-	"golang.org/x/text/transform"
-	"golang.org/x/text/unicode/norm"
+// "golang.org/x/text/transform"
+// "golang.org/x/text/unicode/norm"
 )
 
 // Basic Unicode normal form composing and decomposing - NFC, NFD, NFKC, NFKD
 // Ref. https://blog.golang.org/normalization
 
-// UnicodeNormalizer is a struct that provides basic unicode
-// normal form methods
-type UnicodeNormalizer struct{}
+type NFD struct{}
 
-func (un UnicodeNormalizer) NFC(s string) string {
+func (un *NFD) Normalize(n Normalized) (Normalized, error) {
+	n.NFD()
 
-	t := transform.Chain(norm.NFC)
-
-	normalized, _, _ := transform.String(t, s)
-
-	return normalized
-
+	return n, nil
 }
 
-func (un UnicodeNormalizer) NFD(s string) string {
+type NFC struct{}
 
-	t := transform.Chain(norm.NFD)
+func (un *NFC) Normalize(n Normalized) (Normalized, error) {
+	n.NFC()
 
-	normalized, _, _ := transform.String(t, s)
-
-	return normalized
-
+	return n, nil
 }
 
-func (un UnicodeNormalizer) NFKC(s string) string {
+type NFKD struct{}
 
-	t := transform.Chain(norm.NFKC)
+func (un *NFKD) Normalize(n Normalized) (Normalized, error) {
+	n.NFKD()
 
-	normalized, _, _ := transform.String(t, s)
-
-	return normalized
-
+	return n, nil
 }
 
-func (un UnicodeNormalizer) NFKD(s string) string {
+type NFKC struct{}
 
-	t := transform.Chain(norm.NFKD)
+func (un *NFKC) Normalize(n Normalized) (Normalized, error) {
+	n.NFKC()
 
-	normalized, _, _ := transform.String(t, s)
-
-	return normalized
-
-}
-
-// RemoveAccents decomposes text into small parts, removes all accents
-// then recomposes the text into NFC
-func (un UnicodeNormalizer) RemoveAccents(s string) string {
-
-	t := transform.Chain(norm.NFD, transform.RemoveFunc(isMn), norm.NFC)
-
-	normalized, _, _ := transform.String(t, s)
-
-	return normalized
-
-}
-
-func isMn(r rune) bool {
-	return unicode.Is(unicode.Mn, r) // Mn: nonspacing marks
-}
-
-func (un UnicodeNormalizer) ToLower(s string) string {
-
-	return strings.ToLower(s)
-
-}
-
-func isFiltered(r, filtered rune) bool {
-	return r == filtered
+	return n, nil
 }

@@ -25,25 +25,25 @@ func NewBertNormalizer() BertNormalizer {
 	}
 }
 
-func (bn BertNormalizer) Normalize(txt string) string {
+func (bn BertNormalizer) Normalize(n Normalized) (Normalized, error) {
 	fmt.Println("Implementing BERT normalizer...")
 	// First, Default normalization
-	txt = bn.DefaultNormalizer.Normalize(txt)
+	nml, _ := bn.DefaultNormalizer.Normalize(n)
 
 	// Then, BERT specific normalization
-	if bn.CleanText {
-		txt = cleanText(txt)
-	}
+	// if bn.CleanText {
+	// txt = cleanText(txt)
+	// }
+	//
+	// if bn.Lowercase {
+	// txt = strings.ToLower(txt)
+	// }
+	//
+	// if bn.HandleChineseChars {
+	// txt = padChinese(txt)
+	// }
 
-	if bn.Lowercase {
-		txt = strings.ToLower(txt)
-	}
-
-	if bn.HandleChineseChars {
-		txt = padChinese(txt)
-	}
-
-	return txt
+	return nml, nil
 }
 
 func removeWhitespace(txt string) string {
