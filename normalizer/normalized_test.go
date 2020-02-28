@@ -178,3 +178,39 @@ func TestNormalized_Filter(t *testing.T) {
 	}
 
 }
+
+func TestNormalized_Lowercase(t *testing.T) {
+
+	want := []normalizer.Alignment{
+		{0, 1},
+		{0, 1},
+		{1, 2},
+		{2, 3},
+		{2, 3},
+		{3, 4},
+		{4, 5},
+		{5, 6},
+		{6, 7},
+	}
+
+	gotN := normalizer.NewNormalizedFrom("éléGaNtÅ")
+	beforeAlignments := gotN.Get().Alignments
+	beforeNormalized := gotN.Get().Normalized
+	gotN.Lowercase()
+	afterAlignments := gotN.Get().Alignments
+	afterNormalized := gotN.Get().Normalized
+
+	got := gotN.Get().Alignments
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Alignments Before: %v\n", beforeAlignments)
+		t.Errorf("Alignments After: %v\n", afterAlignments)
+
+		t.Errorf("Normalized Before: %s\n", beforeNormalized)
+		t.Errorf("Normalized After: %s\n", afterNormalized)
+
+		t.Errorf("Want: %v\n", want)
+		t.Errorf("Got: %v\n", got)
+	}
+
+}

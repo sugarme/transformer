@@ -35,7 +35,7 @@ type Normalized struct {
 }
 
 // NewNormalizedFrom creates a Normalized instance from string input
-func NewNormalizedFrom(s string) Normalized {
+func NewNormalizedFrom(s string) *Normalized {
 	var alignments []Alignment
 
 	// Break down string to slice of runes
@@ -52,7 +52,7 @@ func NewNormalizedFrom(s string) Normalized {
 		Alignments: alignments,
 	}
 
-	return Normalized{
+	return &Normalized{
 		normalizedString: n,
 	}
 
@@ -471,29 +471,97 @@ func (n *Normalized) RemoveAccents() {
 
 }
 
-// TODO:
-// Map maps rune in string
-func (n *Normalized) Map() {}
-
-// ForEach calls func for each rune in string
-func (n *Normalized) ForEach() {}
-
 // Lowercase transforms string to lowercase
-func (n *Normalized) Lowercase() {}
+func (n *Normalized) Lowercase() {
+	n.normalizedString.Normalized = strings.ToLower(n.normalizedString.Normalized)
+}
 
 // Uppercase transforms string to uppercase
-func (n *Normalized) Uppercase() {}
+func (n *Normalized) Uppercase() {
+	n.normalizedString.Normalized = strings.ToUpper(n.normalizedString.Normalized)
+}
 
 // SplitOff truncates string with the range [at, len).
 // remaining string will contain the range [0, at).
 // The provided `at` indexes on `char` not bytes.
-func (n *Normalized) SplitOff() {}
+func (n *Normalized) SplitOff(at int) {
+	if at < 0 {
+		log.Fatal("Split off point must be a positive interger number.")
+	}
+	s := n.normalizedString.Normalized
+	if at > len([]rune(s)) {
+		n = NewNormalizedFrom("")
+	}
+
+	var (
+		it       norm.Iter
+		runeVals []string
+		aligns   []Alignment
+	)
+
+	// Split normalized string
+	it.InitString(norm.NFC, s)
+	for !it.Done() {
+		runeVal := string(it.Next())
+		runeVals = append(runeVals, runeVal)
+	}
+
+	// Alignments
+	remainVals := runeVals[0:at]
+	for i, _ := range remainVals {
+		aligns = append(aligns, Alignment{
+			Pos:     i,
+			Changes: i + 1,
+		})
+	}
+	n.normalizedString.Normalized = strings.Join(remainVals, "")
+	n.normalizedString.Alignments = aligns
+
+	// Split original string
+	originalAt := aligns[len(aligns)].Changes // changes of last alignment
+
+	var oRuneVals []string
+	it.InitString(norm.NFC, n.normalizedString.Original)
+	for !it.Done() {
+		runeVal := string(it.Next())
+		oRuneVals = append(oRuneVals, runeVal)
+	}
+
+	remainORuneVals := oRuneVals[0:originalAt]
+	n.normalizedString.Original = strings.Join(remainORuneVals, "")
+
+}
 
 // MergeWith merges an input string with existing one
-func (n *Normalized) MergeWith() {}
+func (n *Normalized) MergeWith(other NormalizedString) {
+	len := n.Len()
+	n.normalizedString.Original = strings.Join([]string{n.normalizedString.Original, other.Original}, "")
+	n.normalizedString.Normalized = strings.Join([]string{n.normalizedString.Normalized, other.Normalized}, "")
+
+	var ajustedAligns []Alignment
+	for _, a := range other.Alignments {
+		new := Alignment{
+			Pos:     a.Pos + len,
+			Changes: a.Changes + len,
+		}
+
+		ajustedAligns = append(ajustedAligns, new)
+	}
+
+	n.normalizedString.Alignments = append(n.normalizedString.Alignments, ajustedAligns...)
+
+}
+
+// Len returns length (number of runes) of normalized string
+func (n *Normalized) Len() int {
+	runes := []rune(n.normalizedString.Normalized)
+	return len(runes)
+}
 
 // LStrip removes leading spaces
-func (n *Normalized) LStrip() {}
+func (n *Normalized) LStrip() {
+
+}
 
 // RStrip removes trailing spaces
 func (n *Normalized) RStrip() {}
