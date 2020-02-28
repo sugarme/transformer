@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"unicode"
 
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -263,12 +264,14 @@ func (n *Normalized) NFD() {
 			switch i := i; {
 			case i == 0:
 				changeMap = append(changeMap, ChangeMap{
-					RuneVal: fmt.Sprintf("%+q", r),
+					// RuneVal: fmt.Sprintf("%+q", r),
+					RuneVal: string(r),
 					Changes: 0,
 				})
 			case i > 0:
 				changeMap = append(changeMap, ChangeMap{
-					RuneVal: fmt.Sprintf("%+q", r),
+					// RuneVal: fmt.Sprintf("%+q", r),
+					RuneVal: string(r),
 					Changes: 1,
 				})
 			}
@@ -307,12 +310,14 @@ func (n *Normalized) NFC() {
 
 		if len(runes) == 1 {
 			changeMap = append(changeMap, ChangeMap{
-				RuneVal: fmt.Sprintf("%+q", runes),
+				// RuneVal: fmt.Sprintf("%+q", runes),
+				RuneVal: string(runes),
 				Changes: 0,
 			})
 		} else if len(runes) > 1 {
 			changeMap = append(changeMap, ChangeMap{
-				RuneVal: fmt.Sprintf("%+q", runes),
+				// RuneVal: fmt.Sprintf("%+q", runes),
+				RuneVal: string(runes),
 				Changes: -1,
 			})
 		}
@@ -343,12 +348,14 @@ func (n *Normalized) NFKD() {
 			switch i := i; {
 			case i == 0:
 				changeMap = append(changeMap, ChangeMap{
-					RuneVal: fmt.Sprintf("%+q", r),
+					// RuneVal: fmt.Sprintf("%+q", r),
+					RuneVal: string(r),
 					Changes: 0,
 				})
 			case i > 0:
 				changeMap = append(changeMap, ChangeMap{
-					RuneVal: fmt.Sprintf("%+q", r),
+					// RuneVal: fmt.Sprintf("%+q", r),
+					RuneVal: string(r),
 					Changes: 1,
 				})
 			}
@@ -380,16 +387,17 @@ func (n *Normalized) NFKC() {
 
 	for !it.Done() {
 		runes := []rune(string(it.Next()))
-		fmt.Printf("%+q", runes)
 
 		if len(runes) == 1 {
 			changeMap = append(changeMap, ChangeMap{
-				RuneVal: fmt.Sprintf("%+q", runes),
+				// RuneVal: fmt.Sprintf("%+q", runes),
+				RuneVal: string(runes),
 				Changes: 0,
 			})
 		} else if len(runes) > 1 {
 			changeMap = append(changeMap, ChangeMap{
-				RuneVal: fmt.Sprintf("%+q", runes),
+				// RuneVal: fmt.Sprintf("%+q", runes),
+				RuneVal: string(runes),
 				Changes: -1,
 			})
 		}
@@ -430,13 +438,15 @@ func (n *Normalized) Filter(fr rune) {
 		} else {
 			if removed > 0 {
 				changeMap = append(changeMap, ChangeMap{
-					RuneVal: fmt.Sprintf("%+q", r),
+					// RuneVal: fmt.Sprintf("%+q", r),
+					RuneVal: string(r),
 					Changes: -removed,
 				})
 				removed = 0
 			} else if removed == 0 {
 				changeMap = append(changeMap, ChangeMap{
-					RuneVal: fmt.Sprintf("%+q", r),
+					// RuneVal: fmt.Sprintf("%+q", r),
+					RuneVal: string(r),
 					Changes: 0,
 				})
 			}
@@ -560,14 +570,74 @@ func (n *Normalized) Len() int {
 
 // LStrip removes leading spaces
 func (n *Normalized) LStrip() {
-
+	n.lrstrip(true, false)
 }
 
 // RStrip removes trailing spaces
-func (n *Normalized) RStrip() {}
+func (n *Normalized) RStrip() {
+	n.lrstrip(false, true)
+}
 
 // Strip remove leading and trailing spaces
-func (n *Normalized) Strip() {}
+func (n *Normalized) Strip() {
+	n.lrstrip(true, true)
+}
 
 // lrstrip - Private func to help with exposed strip funcs
-func (n *Normalized) lrstrip() {}
+func (n *Normalized) lrstrip(left, right bool) {
+	var (
+		leadingSpaces  int = 0
+		trailingSpaces int = 0
+		s              string
+		changeMap      []ChangeMap
+	)
+
+	s = n.normalizedString.Normalized
+
+	runes := []rune(s)
+
+	if left {
+		for _, r := range runes {
+			if !unicode.IsSpace(r) {
+				break
+			}
+
+			leadingSpaces += 1
+		}
+	}
+
+	if right {
+		for i := len(runes) - 1; i >= 0; i-- {
+			if !unicode.IsSpace(runes[i]) {
+				break
+			}
+
+			trailingSpaces += 1
+		}
+	}
+
+	fmt.Println(runes)
+	fmt.Printf("LeadingSpace: %d\n", leadingSpaces)
+	fmt.Printf("TrailingSpace: %d\n", trailingSpaces)
+
+	if leadingSpaces > 0 || trailingSpaces > 0 {
+		for i, r := range runes {
+			if i < leadingSpaces || i >= (len(runes)-trailingSpaces) {
+				continue
+			} else if i == len(runes)-trailingSpaces-1 {
+				changeMap = append(changeMap, ChangeMap{
+					RuneVal: string(r),
+					Changes: -(trailingSpaces),
+				})
+			} else {
+				changeMap = append(changeMap, ChangeMap{
+					RuneVal: string(r),
+					Changes: 0,
+				})
+			}
+		}
+
+		n.Transform(changeMap, leadingSpaces)
+	}
+
+}

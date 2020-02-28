@@ -3,7 +3,7 @@ package normalizer
 import ()
 
 type Normalizer interface {
-	Normalize(txt string) string
+	Normalize(normalized Normalized) error
 }
 
 type normalizer struct {
@@ -16,9 +16,9 @@ func newNormalizer() normalizer {
 	}
 }
 
-func (n normalizer) Normalize(txt string) string {
+func (n normalizer) Normalize(normalized Normalized) error {
 
-	return n.Normalize(txt)
+	return nil
 }
 
 type Option func(*normalizer)

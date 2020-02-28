@@ -1,5 +1,8 @@
-// Package tokenize provides various tools for tokenization
-// including word dicing and text segmentation.
+// Package tokenizer provides various tools for tokenization using different models (BPE, word, unigram)
+// It also provides options to include
+// 1. normalizer
+// 2. pre-processing
+// 3. post-processing.
 package tokenize
 
 import (

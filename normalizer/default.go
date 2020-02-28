@@ -35,21 +35,23 @@ func WithContractionExpansion() DefaultOption {
 
 }
 
-func (dn DefaultNormalizer) Normalize(txt string) string {
+func (dn DefaultNormalizer) Normalize(normalized Normalized) error {
 
-	if dn.Lower {
-		txt = toLowercase(txt)
-	}
+	// if dn.Lower {
+	// txt = toLowercase(txt)
+	// }
+	//
+	// if dn.ExtraWhitespace {
+	// txt = removeExtraWhitespace(txt)
+	// }
+	//
+	// if dn.Contraction {
+	// txt = expandContraction(txt)
+	// }
+	//
+	// return txt
 
-	if dn.ExtraWhitespace {
-		txt = removeExtraWhitespace(txt)
-	}
-
-	if dn.Contraction {
-		txt = expandContraction(txt)
-	}
-
-	return txt
+	return nil
 
 }
 
