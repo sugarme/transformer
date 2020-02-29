@@ -1,6 +1,8 @@
 package normalizer
 
-import ()
+import (
+	"golang.org/x/text/unicode/norm"
+)
 
 type Normalizer interface {
 	Normalize(normalized Normalized) (Normalized, error)
@@ -23,16 +25,20 @@ func (n normalizer) Normalize(normalized Normalized) (Normalized, error) {
 
 type Option func(*normalizer)
 
-func WithBertNormalizer() Option {
+// WithBertNormalizer creates normalizer with BERT normalization features.
+func WithBertNormalizer(cleanText, lowercase, handleChineseChars, stripAccents bool) Option {
 	return func(o *normalizer) {
-		NewBertNormalizer()
+		NewBertNormalizer(cleanText, lowercase, handleChineseChars, stripAccents)
 	}
 }
 
-//TODO: UnicodeNormalizer
-// func WithUnicodeNormalizer() Option {
-//
-// }
+// WithUnicodeNormalizer creates normalizer with one of unicode NFD, NFC, NFKD, or NFKC normalization feature.
+func WithUnicodeNormalizer(form norm.Form) Option {
+	return func(o *normalizer) {
+		NewUnicodeNormalizer(form)
+	}
+
+}
 
 func NewNormalizer(opts ...Option) Normalizer {
 	nml := newNormalizer()
