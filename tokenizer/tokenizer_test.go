@@ -1,11 +1,11 @@
-package tokenize_test
+package tokenizer_test
 
 import (
 	"fmt"
 	"reflect"
 	"testing"
 
-	"github.com/sugarme/sermo/tokenize"
+	"github.com/sugarme/sermo/tokenizer"
 	"github.com/sugarme/sermo/vocab"
 )
 
@@ -22,7 +22,7 @@ func TestBasic(t *testing.T) {
 		{"no lower multi", false, " \tHeLLo!how  \n Are yoU?  ", []string{"HeLLo", "!", "how", "Are", "yoU", "?"}},
 		{"no lower single", false, "H\u00E9llo", []string{"H\u00E9llo"}},
 	} {
-		tkz := tokenize.NewTokenizer(test.lower)
+		tkz := tokenizer.NewTokenizer(test.lower)
 		toks := tkz.Tokenize(test.text)
 		if !reflect.DeepEqual(toks, test.tokens) {
 			t.Errorf("Test %s - Invalid Tokenization - Want: %v, Got: %v", test.name, test.tokens, toks)
@@ -41,8 +41,8 @@ func TestWordpiece(t *testing.T) {
 	// idx, _ := voc.Index("##un")
 	// t.Fatal(fmt.Sprintf("Index of '##un': %v\n", idx))
 
-	var options = []tokenize.Option{
-		tokenize.WithWordpieceTokenizer(tokenize.DefaultMaxWordChars, tokenize.DefaultUnknownToken, voc),
+	var options = []tokenizer.Option{
+		tokenizer.WithWordpieceTokenizer(tokenizer.DefaultMaxWordChars, tokenizer.DefaultUnknownToken, voc),
 		// tokenize.WithVocab(voc),
 	}
 
@@ -56,7 +56,7 @@ func TestWordpiece(t *testing.T) {
 		// {"unwantedX", []string{"[UNK]"}},
 		//{"unwantedX running", []string{"[UNK]", "runn", "##ing"}},
 	} {
-		tkz := tokenize.NewTokenizer(true, options...)
+		tkz := tokenizer.NewTokenizer(true, options...)
 
 		toks := tkz.Tokenize(test.text)
 
