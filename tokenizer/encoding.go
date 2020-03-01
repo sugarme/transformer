@@ -2,6 +2,7 @@ package tokenizer
 
 import (
 	"errors"
+	"reflect"
 
 	"github.com/sugarme/sermo/normalizer"
 )
@@ -113,6 +114,13 @@ func (e *Encoding) Truncate(maxLen uint, stride uint) error {
 	newAttent := e.AttentionMask[0:maxLen]
 	oAttent := e.AttentionMask[maxLen:len(e.AttentionMask)]
 
+	e.Ids = newIds
+	e.TypeIds = newTypeIds
+	e.Tokens = newTokens
+	e.Offsets = newOffsets
+	e.SpecialTokenMask = newSpeToks
+	e.AttentionMask = newAttent
+
 	// Separate the overflowing part into as many Encoding as needed
 	partSize := maxLen - stride
 	overflowing := make([]Encoding, 0)
@@ -121,35 +129,25 @@ func (e *Encoding) Truncate(maxLen uint, stride uint) error {
 
 	// while loop
 	for int(partSize)*partId < len(oIds) {
-
 		o := Encoding{
-			Normalized:       e.Normalized,
-			Ids:              (getCurrentPart(prevEncoding.Ids, oIds, partSize, uint(partId), stride)).([]uint32),
-			TypeIds:          (getCurrentPart(prevEncoding.TypeIds, oTypeIds, partSize, uint(partId), stride)).([]uint32),
-			Tokens:           (getCurrentPart(prevEncoding.Tokens, oTokens, partSize, uint(partId), stride)).([]string),
-			Offsets:          (getCurrentPart(prevEncoding.Offsets, oOffsets, partSize, uint(partId), stride)).([]Offset),
-			SpecialTokenMask: (getCurrentPart(prevEncoding.SpecialTokenMask, oSpeToks, partSize, uint(partId), stride)).([]uint32),
-			AttentionMask:    (getCurrentPart(prevEncoding.AttentionMask, oAttent, partSize, uint(partId), stride)).([]uint32),
+			Normalized: e.Normalized,
+			// Which way is better? using reflect or just type assertion
+			// Ids:        (getCurrentPart(prevEncoding.Ids, oIds, partSize, uint(partId), stride)).([]uint32),
+			Ids:              reflect.ValueOf(getCurrentPart(prevEncoding.Ids, oIds, partSize, uint(partId), stride)).Interface().([]uint32),
+			TypeIds:          reflect.ValueOf(getCurrentPart(prevEncoding.TypeIds, oTypeIds, partSize, uint(partId), stride)).Interface().([]uint32),
+			Tokens:           reflect.ValueOf(getCurrentPart(prevEncoding.Tokens, oTokens, partSize, uint(partId), stride)).Interface().([]string),
+			Offsets:          reflect.ValueOf(getCurrentPart(prevEncoding.Offsets, oOffsets, partSize, uint(partId), stride)).Interface().([]Offset),
+			SpecialTokenMask: reflect.ValueOf(getCurrentPart(prevEncoding.SpecialTokenMask, oSpeToks, partSize, uint(partId), stride)).Interface().([]uint32),
+			AttentionMask:    reflect.ValueOf(getCurrentPart(prevEncoding.AttentionMask, oAttent, partSize, uint(partId), stride)).Interface().([]uint32),
 			Overflowing:      make([]Encoding, 0),
 		}
 
 		partId += 1
 		overflowing = append(overflowing, o)
 		prevEncoding = &overflowing[len(overflowing)-1]
-
 	}
 
-	// replace previous encoding with truncated one
-	e = &Encoding{
-		Normalized:       e.Normalized,
-		Ids:              newIds,
-		TypeIds:          newTypeIds,
-		Tokens:           newTokens,
-		Offsets:          newOffsets,
-		SpecialTokenMask: newSpeToks,
-		AttentionMask:    newAttent,
-		Overflowing:      overflowing,
-	}
+	e.Overflowing = overflowing
 
 	return nil
 
@@ -281,19 +279,56 @@ func (e *Encoding) Pad(targetLength uint, padId uint32, padTypeId uint32, padTok
 
 func getCurrentPart(previous, current interface{}, size, idx, stride uint) interface{} {
 
-	var (
-		curr []interface{}
-		prev []interface{}
-	)
-	if int((idx+1)*size) > len((current).([]interface{})) {
-		curr = current.([]interface{})[:(idx * size)]
-	} else {
-		curr = current.([]interface{})[(idx * size) : (idx+1)*size]
+	switch current.(type) {
+	case []uint32:
+		var curr, prev []uint32
+		if int((idx+1)*size) > reflect.ValueOf(current).Len() {
+			curr = current.([]uint32)[(idx * size):]
+		} else {
+			curr = current.([]uint32)[(idx * size) : (idx+1)*size]
+		}
+		prev = previous.([]uint32)[len(previous.([]uint32))-int(stride):]
+		// concat
+		return append(prev, curr...)
+	case []string:
+		var curr, prev []string
+		if int((idx+1)*size) > reflect.ValueOf(current).Len() {
+			curr = current.([]string)[(idx * size):]
+		} else {
+			curr = current.([]string)[(idx * size) : (idx+1)*size]
+		}
+		prev = previous.([]string)[len(previous.([]string))-int(stride):]
+		// concat
+		return append(prev, curr...)
+	case []Offset:
+		var curr, prev []Offset
+		if int((idx+1)*size) > reflect.ValueOf(current).Len() {
+			curr = current.([]Offset)[(idx * size):]
+		} else {
+			curr = current.([]Offset)[(idx * size) : (idx+1)*size]
+		}
+		prev = previous.([]Offset)[len(previous.([]Offset))-int(stride):]
+		// concat
+		return append(prev, curr...)
+
 	}
 
-	prev = previous.([]interface{})[:len(previous.([]interface{}))-int(stride)]
-
-	// concat
-	return append(prev, curr...)
+	return nil
 
 }
+
+/*
+ * func InterfaceSlice(slice interface{}) []interface{} {
+ *   s := reflect.ValueOf(slice)
+ *   if s.Kind() != reflect.Slice {
+ *     panic("InterfaceSlice() given a non-slice type")
+ *   }
+ *
+ *   ret := make([]interface{}, s.Len())
+ *
+ *   for i := 0; i < s.Len(); i++ {
+ *     ret[i] = s.Index(i).Interface()
+ *   }
+ *
+ *   return ret
+ * } */
