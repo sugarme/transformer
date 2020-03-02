@@ -20,14 +20,14 @@ type Encoding struct {
 	Ids              []uint32
 	TypeIds          []uint32
 	Tokens           []string
-	Offsets          []Offset
+	Offsets          []Offsets
 	SpecialTokenMask []uint32
 	AttentionMask    []uint32
 	Overflowing      []Encoding
 }
 
 // NewEncoding initiate a new encoding from input data
-func NewEncoding(normalized normalizer.Normalized, ids []uint32, typeIds []uint32, tokens []string, offsets []Offset, specialTokenMask []uint32, attentionMask []uint32, overflowing []Encoding) Encoding {
+func NewEncoding(normalized normalizer.Normalized, ids []uint32, typeIds []uint32, tokens []string, offsets []Offsets, specialTokenMask []uint32, attentionMask []uint32, overflowing []Encoding) Encoding {
 	return Encoding{
 		normalized,
 		ids,
@@ -61,7 +61,7 @@ func (e *Encoding) GetTypeIds() []uint32 {
 }
 
 // GetOffsets returns offsets from encoding
-func (e *Encoding) GetOffsets() []Offset {
+func (e *Encoding) GetOffsets() []Offsets {
 	return e.Offsets
 }
 
@@ -136,7 +136,7 @@ func (e *Encoding) Truncate(maxLen uint, stride uint) error {
 			Ids:              reflect.ValueOf(getCurrentPart(prevEncoding.Ids, oIds, partSize, uint(partId), stride)).Interface().([]uint32),
 			TypeIds:          reflect.ValueOf(getCurrentPart(prevEncoding.TypeIds, oTypeIds, partSize, uint(partId), stride)).Interface().([]uint32),
 			Tokens:           reflect.ValueOf(getCurrentPart(prevEncoding.Tokens, oTokens, partSize, uint(partId), stride)).Interface().([]string),
-			Offsets:          reflect.ValueOf(getCurrentPart(prevEncoding.Offsets, oOffsets, partSize, uint(partId), stride)).Interface().([]Offset),
+			Offsets:          reflect.ValueOf(getCurrentPart(prevEncoding.Offsets, oOffsets, partSize, uint(partId), stride)).Interface().([]Offsets),
 			SpecialTokenMask: reflect.ValueOf(getCurrentPart(prevEncoding.SpecialTokenMask, oSpeToks, partSize, uint(partId), stride)).Interface().([]uint32),
 			AttentionMask:    reflect.ValueOf(getCurrentPart(prevEncoding.AttentionMask, oAttent, partSize, uint(partId), stride)).Interface().([]uint32),
 			Overflowing:      make([]Encoding, 0),
@@ -193,7 +193,7 @@ func (e *Encoding) MergeWith(pair Encoding) {
 		}
 	}
 	for _, o := range pair.Offsets {
-		adjustedO := Offset{
+		adjustedO := Offsets{
 			Start: o.Start + startingOffset,
 			End:   o.End + startingOffset,
 		}
@@ -257,9 +257,9 @@ func (e *Encoding) Pad(targetLength uint, padId uint32, padTypeId uint32, padTok
 		newAttentionMask = append(newAttentionMask, e.AttentionMask...)
 		e.AttentionMask = newAttentionMask
 
-		newOffsets := make([]Offset, padLength)
+		newOffsets := make([]Offsets, padLength)
 		for i := 0; i < len(newIds); i++ {
-			newOffsets[i] = Offset{0, 0}
+			newOffsets[i] = Offsets{0, 0}
 		}
 		newOffsets = append(newOffsets, e.Offsets...)
 		e.Offsets = newOffsets
@@ -271,7 +271,7 @@ func (e *Encoding) Pad(targetLength uint, padId uint32, padTypeId uint32, padTok
 			e.Tokens = append(e.Tokens, padToken)
 			e.SpecialTokenMask = append(e.SpecialTokenMask, 1)
 			e.AttentionMask = append(e.AttentionMask, 0)
-			e.Offsets = append(e.Offsets, Offset{0, 0})
+			e.Offsets = append(e.Offsets, Offsets{0, 0})
 		}
 
 	}
@@ -300,14 +300,14 @@ func getCurrentPart(previous, current interface{}, size, idx, stride uint) inter
 		prev = previous.([]string)[len(previous.([]string))-int(stride):]
 		// concat
 		return append(prev, curr...)
-	case []Offset:
-		var curr, prev []Offset
+	case []Offsets:
+		var curr, prev []Offsets
 		if int((idx+1)*size) > reflect.ValueOf(current).Len() {
-			curr = current.([]Offset)[(idx * size):]
+			curr = current.([]Offsets)[(idx * size):]
 		} else {
-			curr = current.([]Offset)[(idx * size) : (idx+1)*size]
+			curr = current.([]Offsets)[(idx * size) : (idx+1)*size]
 		}
-		prev = previous.([]Offset)[len(previous.([]Offset))-int(stride):]
+		prev = previous.([]Offsets)[len(previous.([]Offsets))-int(stride):]
 		// concat
 		return append(prev, curr...)
 

@@ -1,4 +1,4 @@
-package tokenizer
+package tokenize
 
 import (
 	"fmt"

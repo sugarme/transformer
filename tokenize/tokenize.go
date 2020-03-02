@@ -3,7 +3,7 @@
 // 1. normalizer
 // 2. pre-processing
 // 3. post-processing.
-package tokenizer
+package tokenize
 
 import (
 	// "fmt"

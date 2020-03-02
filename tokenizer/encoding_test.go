@@ -16,7 +16,7 @@ func TestTokenizer_MergeWith(t *testing.T) {
 		Ids:              []uint32{1},
 		TypeIds:          []uint32{0},
 		Tokens:           []string{fmt.Sprintf("%v", "Hello ")},
-		Offsets:          []tokenizer.Offset{{0, 6}},
+		Offsets:          []tokenizer.Offsets{{0, 6}},
 		SpecialTokenMask: []uint32{0},
 		AttentionMask:    []uint32{1},
 		Overflowing:      make([]tokenizer.Encoding, 0),
@@ -27,7 +27,7 @@ func TestTokenizer_MergeWith(t *testing.T) {
 		Ids:        []uint32{2},
 		TypeIds:    []uint32{1},
 		Tokens:     []string{fmt.Sprintf("%v", "World!")},
-		Offsets: []tokenizer.Offset{{
+		Offsets: []tokenizer.Offsets{{
 			Start: 0,
 			End:   6},
 		},
@@ -44,7 +44,7 @@ func TestTokenizer_MergeWith(t *testing.T) {
 		Ids:        []uint32{1, 2},
 		TypeIds:    []uint32{0, 1},
 		Tokens:     []string{fmt.Sprintf("%v", "Hello "), fmt.Sprintf("%v", "World!")},
-		Offsets: []tokenizer.Offset{
+		Offsets: []tokenizer.Offsets{
 			{Start: 0, End: 6},
 			{Start: 6, End: 12},
 		},
@@ -70,7 +70,7 @@ func TestTokenizer_Truncate(t *testing.T) {
 			fmt.Sprintf("%v", "World"),
 			fmt.Sprintf("%v", "!"),
 		},
-		Offsets:          []tokenizer.Offset{{0, 5}, {6, 11}, {11, 12}},
+		Offsets:          []tokenizer.Offsets{{0, 5}, {6, 11}, {11, 12}},
 		SpecialTokenMask: []uint32{0, 0, 0},
 		AttentionMask:    []uint32{1, 1, 1},
 		Overflowing:      make([]tokenizer.Encoding, 0),
@@ -87,7 +87,7 @@ func TestTokenizer_Truncate(t *testing.T) {
 			fmt.Sprintf("%v", "Hello"),
 			fmt.Sprintf("%v", "World"),
 		},
-		Offsets:          []tokenizer.Offset{{0, 5}, {6, 11}},
+		Offsets:          []tokenizer.Offsets{{0, 5}, {6, 11}},
 		SpecialTokenMask: []uint32{0, 0},
 		AttentionMask:    []uint32{1, 1},
 		Overflowing: []tokenizer.Encoding{
@@ -98,7 +98,7 @@ func TestTokenizer_Truncate(t *testing.T) {
 				Tokens: []string{
 					fmt.Sprintf("%v", "!"),
 				},
-				Offsets:          []tokenizer.Offset{{11, 12}},
+				Offsets:          []tokenizer.Offsets{{11, 12}},
 				SpecialTokenMask: []uint32{0},
 				AttentionMask:    []uint32{1},
 				Overflowing:      make([]tokenizer.Encoding, 0),
