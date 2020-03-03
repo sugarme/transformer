@@ -76,21 +76,15 @@ func NewToken(id uint32, value string, offsets Offsets) Token {
 	}
 }
 
-type Single string
+type Single struct {
+	Sentence string
+}
 type Dual struct {
-	Value string
-	Pair  string
+	Sentence string
+	Pair     string
 }
 
-type EncodeInputType []interface{}
-
-var EncodeInput EncodeInputType = []interface{}{
-	"Single",
-	Dual{
-		Value: "Value",
-		Pair:  "Pair",
-	},
-}
+type EncodeInput interface{}
 
 // var EncodeInput map[interface{}]string = map[interface{}]string{
 // "Single": "Single",
@@ -143,11 +137,11 @@ type PaddingParams struct{}
 // It can implement any encoding or decoding of any text.
 type Tokenizer struct {
 	// Parts
-	Normalizer    normalizer.Normalizer
-	PreTokenizer  PreTokenizer
-	Model         Model
-	PostProcessor PostProcessor
-	Decoder       Decoder
+	Normalizer    *normalizer.Normalizer
+	PreTokenizer  *PreTokenizer
+	Model         *Model
+	PostProcessor *PostProcessor
+	Decoder       *Decoder
 
 	// Vocab
 	AddedTokens   map[AddedToken]uint32
@@ -165,7 +159,7 @@ func NewTokenizer(model Model) Tokenizer {
 	return Tokenizer{
 		Normalizer:    nil,
 		PreTokenizer:  nil,
-		Model:         model,
+		Model:         &model,
 		PostProcessor: nil,
 		Decoder:       nil,
 
@@ -180,43 +174,43 @@ func NewTokenizer(model Model) Tokenizer {
 }
 
 func (t *Tokenizer) WithNormalizer(n normalizer.Normalizer) {
-	t.Normalizer = n
+	t.Normalizer = &n
 }
 
 func (t *Tokenizer) GetNormalizer() normalizer.Normalizer {
-	return t.Normalizer
+	return *t.Normalizer
 }
 
 func (t *Tokenizer) WithPreTokenizer(preTokenizer PreTokenizer) {
-	t.PreTokenizer = preTokenizer
+	t.PreTokenizer = &preTokenizer
 }
 
 func (t *Tokenizer) GetPreTokenizer() PreTokenizer {
-	return t.PreTokenizer
+	return *t.PreTokenizer
 }
 
 func (t *Tokenizer) WithPostProcessor(postProcessor PostProcessor) {
-	t.PostProcessor = postProcessor
+	t.PostProcessor = &postProcessor
 }
 
 func (t *Tokenizer) GetPostProcessor() PostProcessor {
-	return t.PostProcessor
+	return *t.PostProcessor
 }
 
 func (t *Tokenizer) WithDecoder(decoder Decoder) {
-	t.Decoder = decoder
+	t.Decoder = &decoder
 }
 
 func (t *Tokenizer) GetDecoder() Decoder {
-	return t.Decoder
+	return *t.Decoder
 }
 
 func (t *Tokenizer) WithModel(model Model) {
-	t.Model = model
+	t.Model = &model
 }
 
 func (t *Tokenizer) GetModel() Model {
-	return t.Model
+	return *t.Model
 }
 
 func (t *Tokenizer) WithTruncation(trunc TruncationParams) {
@@ -233,10 +227,10 @@ func (t *Tokenizer) WithPadding(padding PaddingParams) {
 
 func (t *Tokenizer) GetVocabSize(withAddedToken bool) uint {
 	if withAddedToken {
-		return t.Model.GetVocabSize() + uint(len(t.AddedTokens))
+		return (*t.Model).GetVocabSize() + uint(len(t.AddedTokens))
 	}
 
-	return t.Model.GetVocabSize()
+	return (*t.Model).GetVocabSize()
 }
 
 func (t *Tokenizer) TokenToId(token string) uint32 {
@@ -248,7 +242,7 @@ func (t *Tokenizer) TokenToId(token string) uint32 {
 		return id
 	}
 
-	return t.Model.TokenToId(token)
+	return (*t.Model).TokenToId(token)
 
 }
 
@@ -257,11 +251,11 @@ func (t *Tokenizer) IdToToken(id uint32) string {
 	if ok {
 		return tok.Content
 	}
-	return t.Model.IdToToken(id)
+	return (*t.Model).IdToToken(id)
 }
 
 func (t *Tokenizer) NumAddedTokens(isPair bool) uint {
-	return t.PostProcessor.AddedTokens(isPair)
+	return (*t.PostProcessor).AddedTokens(isPair)
 }
 
 type splitRes struct {
@@ -271,7 +265,7 @@ type splitRes struct {
 }
 
 // Encode encodes the given sentence
-func (t *Tokenizer) Encode(input EncodeInputType) Encoding {
+func (t *Tokenizer) Encode(input EncodeInput) Encoding {
 	generateOutput := func(sentence string, typeId uint32) Encoding {
 		// Split into as many sequences as needed to avoid splitting
 		// on our added tokens
@@ -288,22 +282,20 @@ func (t *Tokenizer) Encode(input EncodeInputType) Encoding {
 			}
 
 			// 1. Normalization
-			var normalized normalizer.Normalized
-			if (normalizer.NewNormalizer()) != t.Normalizer { // make sure that normalizer is included
-				normalized, err := t.Normalizer.Normalize(s.Content)
-				if err != nil {
-					log.Fatal(err)
-				}
+			var normalized *normalizer.Normalized
+			if t.Normalizer != nil {
+				normalized = normalizer.NewNormalizedFrom(s.Content)
 			}
+
 			// 2. Pre-tokenization
 			var preTokenized []PreToken
 
-			// TODO: check whether preTokenizer is included
-			preTokenized = t.PreTokenizer.PreTokenize(normalized.Get().Normalized)
+			if t.PreTokenizer != nil {
+				preTokenized = (*t.PreTokenizer).PreTokenize(normalized.Get().Normalized)
+			}
 
 			// 3. Model
-			// TODO: check whether model is included
-			output := t.Model.Tokenize(preTokenized)
+			output := (*t.Model).Tokenize(preTokenized)
 
 			var en Encoding
 
@@ -325,13 +317,46 @@ func (t *Tokenizer) Encode(input EncodeInputType) Encoding {
 		} // end loop over splits
 
 		if len(encodings) == 0 {
-			// TODO: create a new default Encoding
-			return Encoding.Default()
+			return DefaultEncoding()
 		}
 
+		// split off at position 1
+		first := encodings[0]
+		others := encodings[1:]
+
+		// Put others to overflowing of first
+		for _, e := range others {
+			first.MergeWith(e)
+		}
+
+		return first
+	} // end of anonymous function `generateOutput`
+
+	var (
+		sentence, pair         string
+		encoding, pairEncoding Encoding
+	)
+	switch input.(type) {
+	case Single:
+		sentence = input.(Single).Sentence
+	case Dual:
+		sentence = input.(Dual).Sentence
+		pair = input.(Dual).Pair
 	}
 
-	return nil
+	encoding = generateOutput(sentence, 0)
+
+	if len(pair) > 0 {
+		pairEncoding = generateOutput(pair, 1)
+	}
+
+	// 4. Post processing
+	if t.PostProcessor != nil {
+		return (*t.PostProcessor).Process(encoding, pairEncoding)
+	}
+
+	// NOTE.Should we return pairEncoding as well?
+	return encoding
 
 }
 

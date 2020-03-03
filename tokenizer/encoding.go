@@ -40,6 +40,20 @@ func NewEncoding(normalized normalizer.Normalized, ids []uint32, typeIds []uint3
 	}
 }
 
+// Default creates an encoding with default values
+func DefaultEncoding() Encoding {
+	return Encoding{
+		Normalized:       *normalizer.NewNormalizedFrom(""),
+		Ids:              []uint32{0},
+		TypeIds:          []uint32{0},
+		Tokens:           []string{},
+		Offsets:          []Offsets{},
+		SpecialTokenMask: []uint32{},
+		AttentionMask:    []uint32{},
+		Overflowing:      []Encoding{},
+	}
+}
+
 // GetNormalized returns normalized string from encoding
 func (e *Encoding) GetNormalized() normalizer.Normalized {
 	return e.Normalized
