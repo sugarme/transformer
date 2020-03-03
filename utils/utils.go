@@ -82,3 +82,13 @@ func MinMax(array []int) (int, int) {
 	}
 	return min, max
 }
+
+// StringInSlice check whether given string is in a slice
+func StringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}

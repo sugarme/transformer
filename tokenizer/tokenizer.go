@@ -4,8 +4,9 @@ package tokenizer
 // TODO: full description
 
 import (
-	"log"
 	"regexp"
+	"strings"
+	"sync"
 
 	"github.com/sugarme/sermo/normalizer"
 )
@@ -150,8 +151,8 @@ type Tokenizer struct {
 	SpecialTokens map[string]uint32
 
 	// General processing parameters
-	Trunc   TruncationParams
-	Padding PaddingParams
+	Trunc   *TruncationParams
+	Padding *PaddingParams
 }
 
 // Implementing methods for Tokenizer
@@ -168,8 +169,8 @@ func NewTokenizer(model Model) Tokenizer {
 		SplitRe:       &regexp.Regexp{},
 		SpecialTokens: make(map[string]uint32),
 
-		Trunc:   TruncationParams{},
-		Padding: PaddingParams{},
+		Trunc:   nil,
+		Padding: nil,
 	}
 }
 
@@ -357,7 +358,84 @@ func (t *Tokenizer) Encode(input EncodeInput) Encoding {
 
 	// NOTE.Should we return pairEncoding as well?
 	return encoding
+}
 
+// EncodeBatch encodes all sentences in concurrency
+func (t *Tokenizer) EncodeBatch(inputs []EncodeInput) []Encoding {
+	var encodings []Encoding
+	var wg sync.WaitGroup
+
+	wg.Add(len(inputs))
+
+	// Encoding concurrently
+	for i := 0; i < len(inputs); i++ {
+		go func(i int) {
+			defer wg.Done()
+
+			e := t.Encode(inputs[i])
+			encodings = append(encodings, e)
+
+		}(i)
+	}
+
+	wg.Wait()
+
+	// TODO: do padding if included
+	// if t.Padding != nil {}
+
+	return encodings
+}
+
+// Decode returns a corresponding string from an input id
+func (t *Tokenizer) Decode(ids []uint32, skipSpecialTokens bool) string {
+	var tokens []string
+
+	for _, id := range ids {
+		// Look up at added tokens
+		var token string
+		tok, ok := t.AddedTokensR[id]
+		if !ok {
+			// Look up at model
+			token = t.IdToToken(id)
+		}
+
+		token = tok.Content
+
+		_, ok = t.SpecialTokens[token]
+
+		if !skipSpecialTokens || !ok {
+			tokens = append(tokens, token)
+		}
+	}
+
+	if t.Decoder != nil {
+		return (*t.Decoder).Decode(tokens)
+	}
+
+	return strings.Join(tokens, " ")
+}
+
+// DecodeBatch decodes all sentences in concurrency
+func (t *Tokenizer) DecodeBatch(sentences [][]uint32, skipSpecialTokens bool) []string {
+	var decodings []string
+	var wg sync.WaitGroup
+
+	wg.Add(len(sentences))
+
+	// Decoding concurrently
+	for i := 0; i < len(sentences); i++ {
+		go func(i int) {
+			defer wg.Done()
+
+			s := t.Decode(sentences[i], skipSpecialTokens)
+			decodings = append(decodings, s)
+
+		}(i)
+	}
+
+	wg.Wait()
+
+	return decodings
 }
 
 func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
@@ -434,3 +512,25 @@ func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
 	return splits
 
 }
+
+/*
+ * // TODO:
+ * // Train trains a model and replaces the current model using a given trainer
+ * func (t *Tokenizer) Train(trainer Trainer, files []string) {}
+ *
+ * // PreTokenize processes logic, handling the case where there is no PreTokenizer set
+ * func (t *Tokenizer) PreTokenize(sentence string) []PreToken {}
+ *
+ * // Normalize normalizes using given normalizer
+ * func (t *Tokenizer) Normalize(sequence string) normalizer.NormalizedString {}
+ *
+ * // PostProcess processes the case where there is no PostProcessor set
+ * func (t *Tokenizer) PostProcess(encoding Encoding, pairEncoding ...Encoding) Encoding {}
+ *
+ * // AddSpecialTokens registers give tokens as special tokens. This is especially useful
+ * // for removing them while decoding.
+ * func (t *Tokenizer) AddSpecialTokens(tokens []string) uint {}
+ *
+ * // AddTokens adds given tokens to added vocabulary
+ * func (t *Tokenizer) AddTokens(tokens []AddedToken) uint {}
+ *  */
