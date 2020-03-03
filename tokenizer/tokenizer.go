@@ -4,6 +4,7 @@ package tokenizer
 // TODO: full description
 
 import (
+	"log"
 	"regexp"
 
 	"github.com/sugarme/sermo/normalizer"
@@ -151,7 +152,7 @@ type Tokenizer struct {
 	// Vocab
 	AddedTokens   map[AddedToken]uint32
 	AddedTokensR  map[uint32]AddedToken
-	SplitRe       regexp.Regexp
+	SplitRe       *regexp.Regexp
 	SpecialTokens map[string]uint32
 
 	// General processing parameters
@@ -170,7 +171,7 @@ func NewTokenizer(model Model) Tokenizer {
 
 		AddedTokens:   make(map[AddedToken]uint32),
 		AddedTokensR:  make(map[uint32]AddedToken),
-		SplitRe:       regexp.Regexp{},
+		SplitRe:       &regexp.Regexp{},
 		SpecialTokens: make(map[string]uint32),
 
 		Trunc:   TruncationParams{},
@@ -263,5 +264,148 @@ func (t *Tokenizer) NumAddedTokens(isPair bool) uint {
 	return t.PostProcessor.AddedTokens(isPair)
 }
 
+type splitRes struct {
+	Content string
+	Id      uint32
+	Found   bool // whether split was found in AddedTokens/SpecialTokens
+}
+
 // Encode encodes the given sentence
-func (t *Tokenizer) Encode(input EncodeInputType) Encoding {}
+func (t *Tokenizer) Encode(input EncodeInputType) Encoding {
+	generateOutput := func(sentence string, typeId uint32) Encoding {
+		// Split into as many sequences as needed to avoid splitting
+		// on our added tokens
+		var splits []splitRes
+		var encodings []Encoding
+
+		splits = t.splitOnAddedTokens(sentence)
+		for _, s := range splits {
+			// If this is one of our added tokens, return an encoding directly
+			if s.Found {
+				e := NewEncoding(*normalizer.NewNormalizedFrom(s.Content), []uint32{s.Id}, []uint32{typeId}, []string{s.Content}, []Offsets{{0, uint(len(s.Content))}}, []uint32{0}, []uint32{1}, []Encoding{})
+
+				encodings = append(encodings, e)
+			}
+
+			// 1. Normalization
+			var normalized normalizer.Normalized
+			if (normalizer.NewNormalizer()) != t.Normalizer { // make sure that normalizer is included
+				normalized, err := t.Normalizer.Normalize(s.Content)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+			// 2. Pre-tokenization
+			var preTokenized []PreToken
+
+			// TODO: check whether preTokenizer is included
+			preTokenized = t.PreTokenizer.PreTokenize(normalized.Get().Normalized)
+
+			// 3. Model
+			// TODO: check whether model is included
+			output := t.Model.Tokenize(preTokenized)
+
+			var en Encoding
+
+			for _, t := range output {
+				en.Ids = append(en.Ids, t.Id)
+				en.Tokens = append(en.Tokens, t.Value)
+				en.Offsets = append(en.Offsets, t.Offsets)
+			}
+
+			for i := range output {
+				en.TypeIds[i] = typeId
+				en.SpecialTokenMask[i] = 0
+				en.AttentionMask[i] = 1
+			}
+
+			en.Overflowing = []Encoding{}
+
+			encodings = append(encodings, en)
+		} // end loop over splits
+
+		if len(encodings) == 0 {
+			// TODO: create a new default Encoding
+			return Encoding.Default()
+		}
+
+	}
+
+	return nil
+
+}
+
+func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
+
+	var splits []splitRes
+	rs := []rune(sentence)
+	var allSplits [][]int
+
+	// if there's no splitRe (regular epxression to split), do nothing
+	if t.SplitRe == nil {
+		splits = append(splits, splitRes{sentence, 0, false})
+		return splits
+	}
+
+	// matches contains slice of 2-element items (start and end byte position)
+	// of the matched strings
+	matches := t.SplitRe.FindAllStringIndex(sentence, -1)
+
+	for _, m := range matches {
+		splits = append(splits, splitRes{
+			Content: string(rs[m[0]:m[1]]),
+			Id:      0,
+		})
+	}
+
+	// Collect also the splits in-between added tokens
+	startOffset := 0
+	for _, m := range matches {
+		if startOffset < m[0] {
+			allSplits = append(allSplits, []int{startOffset, m[0]})
+		}
+
+		allSplits = append(allSplits, []int{m[0], m[1]})
+		startOffset = m[1]
+	}
+
+	// Check for the last piece
+	last := allSplits[len(allSplits)]
+	if last[1] < len(sentence) {
+		allSplits = append(allSplits, []int{last[1], len(sentence)})
+	}
+
+	if len(allSplits) == 0 {
+		splits = append(splits, splitRes{sentence, 0, false})
+		return splits
+	}
+
+	for _, m := range allSplits {
+		s := string(rs[m[0]:m[1]])
+		// Look up at special tokens
+		id, ok := t.SpecialTokens[s]
+		// not found. Look up at added tokens
+		if !ok {
+			// If not found, id will be 0 and ok = false
+			id, ok = t.AddedTokens[AddedToken{
+				Content:      s,
+				IsSingleWord: false,
+			}]
+			if !ok {
+				splits = append(splits, splitRes{
+					Content: s,
+					Id:      0,
+					Found:   false,
+				})
+			}
+		}
+		splits = append(splits, splitRes{
+			Content: s,
+			Id:      id,
+			Found:   true,
+		})
+	}
+
+	return splits
+
+}
