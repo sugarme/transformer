@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -91,4 +93,40 @@ func StringInSlice(a string, list []string) bool {
 		}
 	}
 	return false
+}
+
+// FileSize returns length of given file using `os.Stat()`
+// Ref. https://stackoverflow.com/questions/17133590
+func FileSize(filepath string) (int64, error) {
+	fi, err := os.Stat(filepath)
+	if err != nil {
+		return 0, err
+	}
+	// get the size
+	return fi.Size(), nil
+}
+
+// ReadAllLn reads all line by line from a file using bufio.scanner
+func ReadAllLn(filepath string, keepBreakLine bool) ([]string, error) {
+	var lines []string
+	file, err := os.Open(filepath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		l := scanner.Text()
+		if keepBreakLine {
+			lines = append(lines, fmt.Sprintf("%v\n", l))
+		}
+		lines = append(lines, l)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return lines, nil
 }

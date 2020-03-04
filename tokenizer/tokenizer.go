@@ -4,11 +4,21 @@ package tokenizer
 // TODO: full description
 
 import (
+	"fmt"
+	"log"
+	// "path/filepath"
+	"bufio"
+	"context"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
 
+	progressbar "github.com/schollz/progressbar/v2"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/sugarme/sermo/normalizer"
+	"github.com/sugarme/sermo/utils"
 )
 
 type Offsets struct {
@@ -356,6 +366,8 @@ func (t *Tokenizer) Encode(input EncodeInput) Encoding {
 		return (*t.PostProcessor).Process(encoding, pairEncoding)
 	}
 
+	encoding = t.postProcess(encoding, pairEncoding)
+
 	// NOTE.Should we return pairEncoding as well?
 	return encoding
 }
@@ -513,24 +525,194 @@ func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
 
 }
 
-/*
- * // TODO:
- * // Train trains a model and replaces the current model using a given trainer
- * func (t *Tokenizer) Train(trainer Trainer, files []string) {}
- *
- * // PreTokenize processes logic, handling the case where there is no PreTokenizer set
- * func (t *Tokenizer) PreTokenize(sentence string) []PreToken {}
- *
- * // Normalize normalizes using given normalizer
- * func (t *Tokenizer) Normalize(sequence string) normalizer.NormalizedString {}
- *
- * // PostProcess processes the case where there is no PostProcessor set
- * func (t *Tokenizer) PostProcess(encoding Encoding, pairEncoding ...Encoding) Encoding {}
- *
- * // AddSpecialTokens registers give tokens as special tokens. This is especially useful
- * // for removing them while decoding.
- * func (t *Tokenizer) AddSpecialTokens(tokens []string) uint {}
- *
- * // AddTokens adds given tokens to added vocabulary
- * func (t *Tokenizer) AddTokens(tokens []AddedToken) uint {}
- *  */
+// TODO:
+// Train trains a model and replaces the current model using a given trainer
+func (t *Tokenizer) Train(trainer Trainer, files []string) error {
+	type Job struct {
+		File     string
+		Progress *progressbar.ProgressBar
+	}
+
+	var jobs []Job
+
+	for _, f := range files {
+		fsize, err := utils.FileSize(f)
+		if err != nil {
+			log.Fatal(err)
+		}
+		bar := progressbar.New(int(fsize))
+
+		jobs = append(jobs, Job{f, bar})
+	}
+
+	// Doing jobs concurrently
+
+	g, ctx := errgroup.WithContext(context.Background())
+	lnChan := make(chan map[string]uint32)
+
+	for i := 0; i < len(jobs); i++ {
+		current := i
+		g.Go(func() error {
+			// Now, do the job
+			file, err := os.Open(jobs[current].File)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+
+			var line string
+			words := make(map[string]uint32)
+
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				line = scanner.Text()
+				// io.scanner returns line w/o `\n`. We add it back manually.
+				line = fmt.Sprintf("%v\n", line)
+
+				normalized := t.normalize(line)
+				preTokenized := t.preTokenize(normalized.Normalized)
+				var tokens []string
+				for _, tok := range preTokenized {
+					tokens = append(tokens, tok.Value)
+				}
+				trainer.ProcessTokens(words, tokens)
+
+				// Pass processed data to channel
+				lnChan <- words
+
+				select {
+				case lnChan <- words:
+					// Keep going
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+
+			return nil
+
+		})
+	}
+
+	// Close out the channel when the first error occurs or
+	// when processing is successful.
+	go func() {
+		g.Wait()
+		close(lnChan)
+	}()
+
+	// Handle result coming from channel
+	// words is a dictionary of words and their frequency
+	words := make(map[string]uint32)
+
+	// calculate frequency and create a final map
+	for result := range lnChan {
+		for w, c := range result {
+			count, ok := words[w]
+			// word exists, sum up frequency
+			if ok {
+				words[w] = count + c
+			}
+			// word not exist, let add it
+			words[w] = c
+		}
+	}
+
+	// Training model
+	model, specialTokens := trainer.Train(words)
+
+	// Replace with trained model
+	t.Model = &model
+	t.AddSpecialTokens(specialTokens)
+
+	// as long as an error occurs, return it.
+	return g.Wait()
+}
+
+// PreTokenize processes logic, handling the case where there is no PreTokenizer set
+func (t *Tokenizer) preTokenize(sentence string) []PreToken {
+	if t.PreTokenizer == nil {
+		return []PreToken{
+			{
+				Value:   sentence,
+				Offsets: Offsets{0, uint(len(sentence))},
+			},
+		}
+	}
+	return (*t.PreTokenizer).PreTokenize(sentence)
+}
+
+// normalize normalizes using given normalizer
+func (t *Tokenizer) normalize(sequence string) normalizer.NormalizedString {
+	normalized := normalizer.NewNormalizedFrom(sequence)
+	return normalized.Get()
+}
+
+// AddSpecialTokens registers give tokens as special tokens. This is especially useful
+// for removing them while decoding.
+func (t *Tokenizer) AddSpecialTokens(tokens []string) uint {
+	var addedTokens []AddedToken
+	for _, tok := range tokens {
+		addedTok := AddedTokenFrom(tok)
+		addedTokens = append(addedTokens, addedTok)
+
+		// add to special tokens
+		id := t.TokenToId(tok)
+		if id > 0 {
+			t.SpecialTokens[tok] = id
+		}
+	}
+
+	added := t.AddTokens(addedTokens)
+
+	t.refreshAddedTokens()
+
+	return added
+
+}
+
+// AddTokens adds given tokens to added vocabulary
+func (t *Tokenizer) AddTokens(tokens []AddedToken) uint {
+	var ignored = 0
+	for _, tok := range tokens {
+		ok := t.TokenToId(tok.Content)
+		if len(tok.Content) == 0 || ok > 0 {
+			ignored += 1
+			continue
+		}
+
+		newId := uint32((*t.Model).GetVocabSize()) + uint32(len(t.AddedTokens))
+		id := t.AddedTokens[tok]
+		// found
+		if id > 0 {
+			ignored += 1
+		}
+		// not found. Add it
+		t.AddedTokens[tok] = newId
+		// update the current revert map
+		t.AddedTokensR[newId] = tok
+
+	}
+
+	t.refreshAddedTokens()
+
+	// Return the number of added tokens
+	return uint(len(tokens) - ignored)
+}
+
+func (t *Tokenizer) refreshAddedTokens() {
+	// We need to rebuild regexp here everytime
+	// because the added tokens may have changed
+
+	// TODO: implement it
+}
+
+// PostProcess processes the case where there is no PostProcessor set
+func (t *Tokenizer) postProcess(encoding Encoding, pairEncoding ...Encoding) Encoding {
+
+	// TODO: implement it
+	return Encoding{}
+}
