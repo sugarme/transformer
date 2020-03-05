@@ -222,15 +222,15 @@ func (t *Tokenizer) GetModel() Model {
 }
 
 func (t *Tokenizer) WithTruncation(trunc TruncationParams) {
-	t.Trunc = trunc
+	t.Trunc = &trunc
 }
 
 func (t *Tokenizer) GetTruncation() TruncationParams {
-	return t.Trunc
+	return *t.Trunc
 }
 
 func (t *Tokenizer) WithPadding(padding PaddingParams) {
-	t.Padding = padding
+	t.Padding = &padding
 }
 
 func (t *Tokenizer) GetVocabSize(withAddedToken bool) uint {
@@ -524,7 +524,6 @@ func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
 
 }
 
-// TODO:
 // Train trains a model and replaces the current model using a given trainer
 func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 	type Job struct {
@@ -764,6 +763,69 @@ func (t *Tokenizer) postProcess(encoding Encoding, pairEncodings ...Encoding) En
 func (t *Tokenizer) refreshAddedTokens() {
 	// We need to rebuild regexp here everytime
 	// because the added tokens may have changed
+	var specialTokens []AddedToken
+	var newTokens []string
 
-	// TODO: implement it
+	for k, _ := range t.SpecialTokens {
+		addedTok := AddedToken{
+			Content:      k,
+			IsSingleWord: true,
+		}
+		specialTokens = append(specialTokens, addedTok)
+	}
+
+	var addedTokens []AddedToken
+	for k, _ := range t.AddedTokens {
+		addedTokens = append(addedTokens, k)
+	}
+
+	// merge with the one from special tokens
+	addedTokens = append(addedTokens, specialTokens...)
+
+	for _, t := range addedTokens {
+		var tok string
+		if t.IsSingleWord {
+			var (
+				firstB string // first boundary
+				lastB  string // last boundary
+			)
+			rs := []rune(t.Content)
+			firstChar := string(rs[0])
+			lastChar := string(rs[len(rs)])
+			isWordChar := func(char string) bool {
+				m, err := regexp.MatchString(`\w`, char)
+				if err != nil {
+					log.Fatal(err)
+				}
+				return m
+			}
+
+			if isWordChar(firstChar) {
+				firstB = fmt.Sprintf("%v", `\b`) // NOTE: back tick for raw string
+			} else {
+				firstB = ""
+			}
+
+			if isWordChar(lastChar) {
+				lastB = fmt.Sprintf("%v", `\b`)
+			} else {
+				lastB = ""
+			}
+
+			// Escape all regular expression metacharacters
+			escapeTok := regexp.QuoteMeta(t.Content)
+			tok = fmt.Sprintf("%v%v%v", firstB, escapeTok, lastB)
+		} else {
+			tok = regexp.QuoteMeta(t.Content)
+		}
+
+		newTokens = append(newTokens, tok)
+	}
+
+	if len(newTokens) == 0 {
+		t.SplitRe = nil
+	}
+
+	re := strings.Join(newTokens, "|")
+	t.SplitRe = regexp.MustCompile(re)
 }
