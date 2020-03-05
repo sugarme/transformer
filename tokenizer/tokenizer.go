@@ -141,9 +141,6 @@ func (at *AddedToken) Eq(other AddedToken) bool {
 	return at.Content == other.Content
 }
 
-type TruncationParams struct{}
-type PaddingParams struct{}
-
 // Tokenizer represents a tokenization pipeline.
 // It can implement any encoding or decoding of any text.
 type Tokenizer struct {
@@ -392,8 +389,10 @@ func (t *Tokenizer) EncodeBatch(inputs []EncodeInput) []Encoding {
 
 	wg.Wait()
 
-	// TODO: do padding if included
-	// if t.Padding != nil {}
+	// Do padding if included
+	if t.Padding != nil {
+		PadEncodings(encodings, *t.Padding)
+	}
 
 	return encodings
 }
@@ -703,16 +702,68 @@ func (t *Tokenizer) AddTokens(tokens []AddedToken) uint {
 	return uint(len(tokens) - ignored)
 }
 
+// PostProcess processes the case where there is no PostProcessor set
+func (t *Tokenizer) postProcess(encoding Encoding, pairEncodings ...Encoding) Encoding {
+
+	var (
+		isPaired     bool = false
+		pairEncoding Encoding
+	)
+	// 1. Truncate if needed
+	if t.Trunc != nil {
+		var nAddedTokens uint
+		if t.PostProcessor == nil {
+			nAddedTokens = 0
+		}
+
+		if pairEncodings != nil {
+			isPaired = true
+			pairEncoding = pairEncodings[0]
+		}
+		nAddedTokens = (*t.PostProcessor).AddedTokens(isPaired)
+
+		if nAddedTokens > 0 {
+			params := t.Trunc
+			params.MaxLength = t.Trunc.MaxLength - nAddedTokens
+			TruncateEncodings(encoding, *params, pairEncoding)
+		} else {
+			TruncateEncodings(encoding, *t.Trunc, pairEncoding)
+		}
+	}
+
+	// 2. Post processing
+	var finalEncoding Encoding
+	if t.PostProcessor != nil {
+		finalEncoding = (*t.PostProcessor).Process(encoding, pairEncoding)
+	} else {
+		if isPaired {
+			finalEncoding = encoding
+		}
+
+		encoding.MergeWith(pairEncoding)
+		finalEncoding = encoding
+	}
+
+	// 3. Padding if needed
+	if t.Padding != nil {
+		// We can only pad for a given size. If the Strategy is BatchLongest,
+		// It will be done when we handle a batch
+		var size uint
+		if t.Padding.Strategy.Name == "Fixed" {
+			size = t.Padding.Strategy.Value.(uint)
+		} else {
+			size = uint(len(finalEncoding.GetIds()))
+		}
+
+		finalEncoding.Pad(size, t.Padding.PadId, t.Padding.PadTypeId, t.Padding.PadToken, t.Padding.Direction)
+	}
+
+	return finalEncoding
+}
+
 func (t *Tokenizer) refreshAddedTokens() {
 	// We need to rebuild regexp here everytime
 	// because the added tokens may have changed
 
 	// TODO: implement it
-}
-
-// PostProcess processes the case where there is no PostProcessor set
-func (t *Tokenizer) postProcess(encoding Encoding, pairEncoding ...Encoding) Encoding {
-
-	// TODO: implement it
-	return Encoding{}
 }

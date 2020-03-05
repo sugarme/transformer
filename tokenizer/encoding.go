@@ -7,10 +7,10 @@ import (
 	"github.com/sugarme/sermo/normalizer"
 )
 
-type PaddingDir int
+type PaddingDirection int
 
 const (
-	Left PaddingDir = iota
+	Left PaddingDirection = iota
 	Right
 )
 
@@ -220,7 +220,7 @@ func (e *Encoding) MergeWith(pair Encoding) {
 }
 
 // Pad pads current encoding with given length, values to either Left or Right direction
-func (e *Encoding) Pad(targetLength uint, padId uint32, padTypeId uint32, padToken string, direction PaddingDir) {
+func (e *Encoding) Pad(targetLength uint, padId uint32, padTypeId uint32, padToken string, direction PaddingDirection) {
 	// 1. Recursively call for overflowing part
 	for _, o := range e.Overflowing {
 		o.Pad(targetLength, padId, padTypeId, padToken, direction)
