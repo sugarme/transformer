@@ -4,21 +4,19 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sugarme/sermo/utils"
+	slice "github.com/sugarme/sermo/utils/slice"
 )
 
-func TestSlice_Insert(t *testing.T) {
+func TestInsertStr(t *testing.T) {
 
-	want := []string{"A", "B", "C", "D", "E"}
+	a := []string{"A", "B", "C", "D", "E"}
+	want := []string{"A", "B", "x", "C", "D", "E"}
 
-	var a utils.Slice = utils.Slice{"A", "B", "C", "D", "E"}
 	var item string = "x"
-	err := a.Insert(2, item)
+	got, err := slice.InsertStr(a, item, 2)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
-
-	got := a
 
 	if !reflect.DeepEqual(want, got) {
 		t.Errorf("Want: %v\n", want)
