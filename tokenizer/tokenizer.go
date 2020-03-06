@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sugarme/sermo/normalizer"
-	"github.com/sugarme/sermo/utils"
+	"github.com/sugarme/sermo/util"
 )
 
 type Offsets struct {

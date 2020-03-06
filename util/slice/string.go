@@ -1,7 +1,7 @@
 // utils slice manupulation
 // Ref. https://github.com/golang/go/wiki/SliceTricks
 // TODO: function chaining as in : https://github.com/elliotchance/pie
-package utils
+package util
 
 import (
 	"errors"

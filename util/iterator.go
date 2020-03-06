@@ -1,4 +1,4 @@
-package utils
+package util
 
 // RuneIter is rune iterator with Next() method.
 // Ref. https://stackoverflow.com/questions/14000534

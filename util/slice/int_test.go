@@ -1,4 +1,4 @@
-package utils_test
+package util_test
 
 import (
 	"reflect"
@@ -7,13 +7,13 @@ import (
 	slice "github.com/sugarme/sermo/utils/slice"
 )
 
-func TestInsertStr(t *testing.T) {
+func TestInsertInt(t *testing.T) {
 
-	a := []string{"A", "B", "C", "D", "E"}
-	want := []string{"A", "B", "x", "C", "D", "E"}
+	a := []int{3, 5, 7, 9}
+	want := []int{3, 5, 0, 7, 9}
 
-	var item string = "x"
-	got, err := slice.InsertStr(a, item, 2)
+	var item int = 0
+	got, err := slice.InsertInt(a, item, 2)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
