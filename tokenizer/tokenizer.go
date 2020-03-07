@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sugarme/sermo/normalizer"
+	"github.com/sugarme/sermo/util"
 )
 
 type Offsets struct {
@@ -533,7 +534,7 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 	var jobs []Job
 
 	for _, f := range files {
-		fsize, err := utils.FileSize(f)
+		fsize, err := util.FileSize(f)
 		if err != nil {
 			log.Fatal(err)
 		}

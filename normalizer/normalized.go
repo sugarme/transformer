@@ -10,7 +10,7 @@ import (
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/sugarme/sermo/utils"
+	"github.com/sugarme/sermo/util"
 )
 
 // NormalizedString keeps both versions of an input string and
@@ -96,7 +96,7 @@ func (n *Normalized) OriginalOffsets(r []int) []int {
 	pos := selectedAlignments[0].Pos
 	changes := selectedAlignments[len(selectedAlignments)].Changes
 
-	return utils.MakeRange(pos, changes)
+	return util.MakeRange(pos, changes)
 
 }
 
@@ -217,7 +217,7 @@ func (n *Normalized) Transform(m []ChangeMap, initialOffset int) {
 				pool = append(pool, a.Pos)
 			}
 
-			min, max = utils.MinMax(pool)
+			min, max = util.MinMax(pool)
 
 			align = Alignment{
 				Pos:     min,

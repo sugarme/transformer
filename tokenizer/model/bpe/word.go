@@ -9,6 +9,8 @@ import (
 	"github.com/sugarme/sermo/tokenizer"
 )
 
+const DefaultCacheCapacity uint = 10000
+
 type Merge struct {
 	Pos   uint
 	Rank  uint32
