@@ -44,7 +44,7 @@ type PreTokenizer interface {
 
 // Model represents a model used during tokenization (i.e., BPE, Word, or Unigram)
 type Model interface {
-	Tokenize(tokens []PreToken) []Token
+	Tokenize(tokens []PreToken) ([]Token, error)
 	TokenToId(token string) uint32
 	IdToToken(id uint32) string
 	GetVocabSize() uint
@@ -303,7 +303,7 @@ func (t *Tokenizer) Encode(input EncodeInput) Encoding {
 			}
 
 			// 3. Model
-			output := (*t.Model).Tokenize(preTokenized)
+			output, _ := (*t.Model).Tokenize(preTokenized)
 
 			var en Encoding
 

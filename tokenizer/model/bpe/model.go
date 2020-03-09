@@ -7,9 +7,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/sugarme/sermo/tokenizer"
+	"github.com/sugarme/sermo/util"
 )
 
 type Vocab map[string]uint32
@@ -39,11 +44,15 @@ type BpeBuilder struct {
 }
 
 func NewBpeBuilder() *BpeBuilder {
+	var (
+		vocab  *Vocab  = new(Vocab)
+		merges *Merges = new(Merges)
+	)
 	return &BpeBuilder{
 		Config: Config{
 			Files:                   nil,
-			Vocab:                   *new(Vocab),
-			Merges:                  *new(Merges),
+			Vocab:                   vocab,
+			Merges:                  merges,
 			CacheCapacity:           DefaultCacheCapacity,
 			Dropout:                 nil,
 			UnkToken:                nil,
@@ -110,11 +119,14 @@ func (bb *BpeBuilder) Build() (*BPE, error) {
 
 	// Read files if provided
 	if bb.Config.Files != nil {
-		vocab, merges = BPE.ReadFiles(&bb.Config.Files.Vocab, bb.Config.Files.Merges)
-		bb.Config.Vocab = &vocab
-		bb.Config.Merges = &merges
+		vocab, merges, err := bpe.ReadFiles(bb.Config.Files.Vocab, bb.Config.Files.Merges)
+		if err != nil {
+			return nil, err
+		}
+		bb.Config.Vocab = vocab
+		bb.Config.Merges = merges
 
-		for k, v := range vocab {
+		for k, v := range *vocab {
 			vocabR[v] = k
 		}
 	}
@@ -265,7 +277,7 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 		}
 
 		pair := Pair{&a, &b}
-		newToken := fmt.Sprint("%v%v", parts[0], parts[1])
+		newToken := fmt.Sprintf("%v%v", parts[0], parts[1])
 		newId, ok := vocab[newToken]
 		if !ok {
 			err = fmt.Errorf("Error: value for %s key not found.", parts[0])
@@ -285,10 +297,291 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 
 	}
 
-	if s.Err != nil {
+	if s.Err() != nil {
 		return nil, nil, s.Err()
 	}
 
 	return &vocab, &merges, nil
 
+}
+
+// ClearCache reset the cache
+func (b *BPE) ClearCache() {
+	if b.Cache != nil {
+		b.Cache.Clear()
+	}
+}
+
+// GetVocab returns BPE vocab
+func (b *BPE) GetVocab() *Vocab {
+	return b.Vocab
+}
+
+// GetUnkToken returns `unk` token
+func (b *BPE) GetUnkToken() *string {
+	return b.UnkToken
+}
+
+// GetContinuingSubwordPrefix returns continuing subword prefix
+func (b *BPE) GetContinuingSubwordPrfix() *string {
+	return b.ContinuingSubwordPrefix
+}
+
+// MergeWord merges given word
+func (b *BPE) MergeWord(w string) *Word {
+	word := NewWord()
+
+	chars := strings.Split(w, "")
+	var (
+		prefix, suffix string
+	)
+
+	if b.ContinuingSubwordPrefix != nil {
+		prefix = *b.ContinuingSubwordPrefix
+	} else {
+		prefix = ""
+	}
+
+	if b.EndOfWordSuffix != nil {
+		suffix = *b.EndOfWordSuffix
+	} else {
+		suffix = ""
+	}
+
+	for i, c := range chars {
+		var s string = c
+		// Add `continuingSubwordPrefix` if relevant
+		if i > 0 && i < len(chars) {
+			s = fmt.Sprintf("%v%v", prefix, s)
+		} else if i == len(chars) { // last `char`
+			s = fmt.Sprintf("%v%v", s, suffix)
+		}
+
+		// Look its id up
+		if id, ok := (*b.Vocab)[s]; ok { // found
+			word.Add(id)
+		} else if b.UnkToken != nil { // not found, add `unk`
+			// get `unk` id
+			unkId := (*b.Vocab)[*b.UnkToken]
+			// add `unk`
+			word.Add(unkId)
+		}
+	}
+
+	word.MergeAll(*b.Merges, *b.Dropout)
+
+	return word
+}
+
+// WordToTokens slices word to tokens
+func (b *BPE) WordToTokens(word Word, initialOffsets tokenizer.Offsets) ([]tokenizer.Token, error) {
+
+	var tokens []tokenizer.Token
+	chars := word.GetChars()
+	offsets := word.GetOffsets()
+	var zWord []struct {
+		Id      uint32
+		Offsets tokenizer.Offsets
+	}
+
+	err := util.Zip(chars, offsets, &zWord)
+	if err != nil {
+		return nil, err
+	}
+	for _, z := range zWord {
+		tok := tokenizer.Token{
+			Id:      z.Id,
+			Value:   (*b.VocabR)[z.Id],
+			Offsets: z.Offsets,
+		}
+		tokens = append(tokens, tok)
+	}
+
+	return tokens, nil
+}
+
+// Implement Model interface for BPE
+func (b *BPE) GetVocabSize() uint {
+	vocabLen := len(*b.Vocab)
+	return uint(vocabLen)
+}
+
+// Tokenize tokenizes sentences into tokens
+// NOTE: sentence is []PreToken struct{Value string, Offsets Offsets}
+func (b *BPE) Tokenize(sentence []tokenizer.PreToken) ([]tokenizer.Token, error) {
+	if len(sentence) == 0 {
+		return []tokenizer.Token{}, nil
+	}
+
+	var encoded []tokenizer.Token = make([]tokenizer.Token, len(sentence))
+
+	var cachedWords []Word
+	var keys []string
+
+	// if using dropout, we don't use the cache
+	if b.Dropout != nil {
+		cachedWords = nil
+	} else {
+		for _, k := range sentence {
+			keys = append(keys, k.Value)
+		}
+		cachedWords = b.Cache.GetValues(keys)
+
+	}
+
+	var shouldUpdateCache bool = false
+
+	for i, preTok := range sentence {
+		var (
+			tokens []tokenizer.Token
+			err    error
+		)
+
+		// not using cache as we're using dropout
+		if cachedWords == nil {
+			word := b.MergeWord(preTok.Value)
+			tokens, err = b.WordToTokens(*word, preTok.Offsets)
+		} else {
+			if i > len(cachedWords) {
+				// no cache hit, let's recompute merges
+				word := b.MergeWord(preTok.Value)
+				tokens, err = b.WordToTokens(*word, preTok.Offsets)
+				// Add to cache
+				cachedWords[i] = *word
+				shouldUpdateCache = true
+			} else {
+				word := cachedWords[i]
+				tokens, err = b.WordToTokens(word, preTok.Offsets)
+				if err != nil {
+					return nil, err
+				}
+				// Remove this entry so we don't needlessly try to update it
+				// in the cache below.
+				cachedWords, err = deleteWord(cachedWords, i)
+				if err != nil {
+					return nil, err
+				}
+
+			}
+
+		}
+
+		encoded = append(encoded, tokens...)
+
+		// Updae the cache if we need
+		if cachedWords != nil {
+			if shouldUpdateCache {
+				var cachedItems []CacheItem
+
+				err = util.Zip(keys, cachedWords, cachedItems)
+				if err != nil {
+					return nil, err
+				}
+
+				b.Cache.SetValues(cachedItems)
+			}
+		}
+
+	}
+
+	return encoded, nil
+}
+
+func (b *BPE) TokenToId(token string) uint32 {
+	return (*b.Vocab)[token]
+}
+
+func (b *BPE) IdToToken(id uint32) string {
+	return (*b.VocabR)[id]
+}
+
+func (b *BPE) Save(dir string, nameOpt ...string) error {
+	var vfile string
+	var mfile string
+	var err error
+	if len(nameOpt) > 0 {
+		vfile = fmt.Sprintf("%v/%v-vocab.json", dir, nameOpt[0])
+		mfile = fmt.Sprintf("%v/%v-merges.txt", dir, nameOpt[0])
+	} else {
+		vfile = fmt.Sprintf("%v/vocab.json", dir)
+		mfile = fmt.Sprintf("%v/merges.txt", dir)
+
+	}
+	// make filepath
+	err = makeFilePath(vfile)
+	if err != nil {
+		return err
+	}
+
+	// Write vocab.json
+	var vocabData []byte
+	vocabData, err = json.Marshal(b.Vocab)
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(vfile, vocabData, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	// Write merges.txt
+	// each line is a pair separated by a space
+	var lines []string
+	type pairRank struct {
+		Pair Pair
+		Rank uint32
+	}
+	var pairRanks []pairRank
+	for pair, pairVal := range *b.Merges {
+		pairRanks = append(pairRanks, pairRank{
+			Pair: pair,
+			Rank: pairVal.Rank,
+		})
+	}
+
+	// sort pairRanks by `Rank` field in-place
+	sort.Slice(pairRanks, func(i, j int) bool {
+		return pairRanks[i].Rank < pairRanks[j].Rank
+	})
+
+	// Create lines of merges
+	for _, p := range pairRanks {
+		line := fmt.Sprintf("%v %v\n", p.Pair.C1, p.Pair.C2)
+		lines = append(lines, line)
+	}
+
+	// write to file
+	file, err := os.Create(mfile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	w := bufio.NewWriter(file)
+	for _, line := range lines {
+		fmt.Fprintln(w, line)
+	}
+	return w.Flush()
+
+}
+
+func deleteWord(a []Word, i int) ([]Word, error) {
+	var err error
+	if i < 0 || i > len(a) {
+		err = errors.New("`i` index is out of bound.")
+		return nil, err
+	}
+
+	return append(a[:i], a[i+1:]...), nil
+}
+
+// makeFilePath creates a filePath. If dir not existing, create it
+func makeFilePath(filename string) error {
+	var err error
+	dirName := filepath.Dir(filename)
+	if _, err = os.Stat(dirName); err != nil {
+		return err
+	}
+	return os.MkdirAll(dirName, os.ModePerm)
 }

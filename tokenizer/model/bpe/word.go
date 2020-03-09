@@ -100,8 +100,8 @@ type Word struct {
 	Symbols Symbols
 }
 
-func NewWord() Word {
-	return Word{
+func NewWord() *Word {
+	return &Word{
 		Symbols: []Symbol{},
 	}
 }

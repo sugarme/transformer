@@ -5,23 +5,28 @@ import (
 )
 
 // Cache is a map with read-write mutex included
+// to hold map of `word` strings
 // E.g. https://tour.golang.org/concurrency/9
 // NOTE: can we you sync.Map struct instead???
 type Cache struct {
-	mux      sync.RWMutex
-	cmap     map[interface{}]interface{}
+	mux sync.RWMutex
+	// cmap     map[interface{}]interface{}
+	cmap     map[string]Word
 	Capacity uint
 }
 
 type CacheItem struct {
-	Key   interface{}
-	Value interface{}
+	// Key   interface{}
+	// Value interface{}
+	Key   string
+	Value Word // `word` string
 }
 
 // NewCache create an empty Cache with a specified capacity
 func NewCache(capacity uint) *Cache {
 	return &Cache{
-		cmap:     make(map[interface{}]interface{}, capacity),
+		// cmap:     make(map[interface{}]interface{}, capacity),
+		cmap:     make(map[string]Word, capacity),
 		Capacity: capacity,
 	}
 }
@@ -40,11 +45,12 @@ func (c *Cache) Clear() {
 	}
 }
 
-func (c *Cache) GetValues(keys []interface{}) []interface{} {
+// GetValues returns slices of values associated with input keys
+func (c *Cache) GetValues(keys []string) []Word {
 	c.mux.Lock() // Lock so only one goroutine at a time can access
 	defer c.mux.Unlock()
 
-	var res []interface{}
+	var res []Word
 
 	for _, k := range keys {
 		res = append(res, c.cmap[k])
