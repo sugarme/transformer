@@ -3,6 +3,7 @@ module github.com/sugarme/sermo
 go 1.13
 
 require (
+	github.com/cheggaaa/pb/v3 v3.0.4
 	github.com/emirpasic/gods v1.12.0
 	github.com/gonum/blas v0.0.0-20181208220705-f22b278b28ac
 	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82 // indirect
