@@ -192,7 +192,7 @@ func (bt *BpeTrainer) addSpecialTokens(w2id map[string]uint32, id2w []string) {
 // computeAlphabet computes the initial alphabet and limit it if relevant
 func (bt *BpeTrainer) computeAlphabet(wc, w2id map[string]uint32, id2w []string) {
 	// compute the alphabet from seen words
-	var alphabet map[string]uint
+	var alphabet map[string]uint = make(map[string]uint)
 
 	for word, count := range wc {
 		chars := strings.Split(word, "")
@@ -226,9 +226,12 @@ func (bt *BpeTrainer) computeAlphabet(wc, w2id map[string]uint32, id2w []string)
 	// if `limitAlphabet` < `len(initialAlphabet)` some of these
 	// initial characters will be removed.
 	var toRemove int = 0
-	var limit int = int(*bt.LimitAlphabet)
-	if len(alphabet) > int(*bt.LimitAlphabet) {
-		toRemove = len(alphabet) - limit
+	var limit int
+	if bt.LimitAlphabet != nil {
+		limit = int(*bt.LimitAlphabet)
+		if len(alphabet) > int(*bt.LimitAlphabet) {
+			toRemove = len(alphabet) - limit
+		}
 	}
 
 	// remove the unwanted `chars`
@@ -387,7 +390,7 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 
 func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	var (
-		wordToId map[string]uint32
+		wordToId map[string]uint32 = make(map[string]uint32)
 		idToWord []string
 	)
 

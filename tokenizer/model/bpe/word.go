@@ -102,17 +102,18 @@ type Word struct {
 
 func NewWord() *Word {
 	return &Word{
-		Symbols: []Symbol{},
+		Symbols: Symbols{},
 	}
 }
 
 func (w *Word) Add(c uint32) {
 	var (
 		prev, next int
+		last       Symbol
 	)
-	len := len(w.Symbols)
-	last := w.Symbols[len]
 
+	len := len(w.Symbols)
+	last = w.Symbols[len-1]
 	if last.Next != nil {
 		// update `next` on previous one
 		w.Symbols[len].Next = &len
