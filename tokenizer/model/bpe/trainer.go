@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/emirpasic/gods/trees/binaryheap"
 	// 800 stars
 	// progressbar "github.com/schollz/progressbar/v2"
 	// 2.2 stars
@@ -154,19 +156,22 @@ func NewBpeTrainer(minFreq uint32, vocabSize uint) *BpeTrainer {
 
 }
 
-func (bt *BpeTrainer) setupProgress() {
+func (bt *BpeTrainer) setupProgress() interface{} {
 	if bt.ShowProgress {
 		// TODO: setup progress bar
 	}
+	return nil
 }
 
 // set the progress bar in the finish state
-func (bt *BpeTrainer) finalizeProgress(pb interface{}, finalLen uint) {
+func (bt *BpeTrainer) finalizeProgress(pb interface{}, finalLen uint) interface{} {
 	if pb != nil {
 		// TODO:
 		// set length
 		// finish up
 	}
+
+	return nil
 }
 
 // updateProgress update the progress bar with the new provided length and msg
@@ -303,7 +308,7 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 }
 
 // countPairs counts ...
-func (bt *BpeTrainer) countPairs(words []Word, counts []uint32) (map[Pair]uint32, map[Pair]UintSet) {
+func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interface{}) (map[Pair]uint32, map[Pair]UintSet) {
 
 	var pairCounts map[Pair]uint32 = make(map[Pair]uint32, bt.VocabSize*2)
 	var whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet, bt.VocabSize*2)
@@ -378,4 +383,214 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32) (map[Pair]uint32
 
 	return pairCounts, whereToUpdate
 
+}
+
+func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
+	var (
+		wordToId map[string]uint32
+		idToWord []string
+	)
+
+	var progress = bt.setupProgress()
+
+	// 1. Add all special tokens to the vocabular
+	bt.addSpecialTokens(wordToId, idToWord)
+
+	// 2. Compute the initial alphabet
+	bt.computeAlphabet(wordCounts, wordToId, idToWord)
+
+	// 3. Tokenize words
+	bt.updateProgress(progress, uint(len(wordCounts)), "Tokenize word")
+
+	words, counts := bt.tokenizeWords(wordCounts, wordToId, idToWord, progress)
+
+	bt.finalizeProgress(progress, uint(len(words)))
+
+	// 4. Count pairs in words
+	bt.updateProgress(progress, uint(len(words)), "Count pairs")
+
+	var (
+		pairCounts    map[Pair]uint32
+		whereToUpdate map[Pair]UintSet
+	)
+
+	pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
+
+	// insert them to the queue
+	var queue = binaryheap.NewWithIntComparator()
+
+	for pair, pos := range whereToUpdate {
+		if count, ok := pairCounts[pair]; ok {
+			queue.Push(TMerge{
+				Pair:  pair,
+				Count: count,
+				Pos:   pos,
+			})
+		}
+	}
+	bt.finalizeProgress(progress, uint(len(words)))
+
+	// 5. Do merges
+	bt.updateProgress(progress, bt.VocabSize, "Compute merges")
+
+	type TMerges struct {
+		Pair    Pair
+		PairVal uint32
+	}
+
+	var merges []TMerges
+
+	for {
+		// Stop as soon as we have a big enough vocabulary
+		if uint(len(wordToId)) >= bt.VocabSize {
+			break
+		}
+
+		if queue.Empty() {
+			break
+		}
+
+		t, _ := queue.Pop()
+		var top TMerge = t.(TMerge)
+		if top.Count != pairCounts[top.Pair] {
+			top.Count = pairCounts[top.Pair]
+			queue.Push(top)
+
+			continue
+		}
+
+		if top.Count < 1 || bt.MinFrequency > top.Count {
+			break
+		}
+
+		partA := idToWord[*top.Pair.C1]
+		partB := idToWord[*top.Pair.C2]
+
+		// Build new token
+		if prefix := bt.ContinuingSubwordPrefix; prefix != nil {
+			if strings.HasPrefix(partB, *prefix) {
+				// strip prefix
+				partB = strings.TrimPrefix(partB, *prefix)
+			}
+		}
+
+		newToken := fmt.Sprintf("%v%v", partA, partB)
+
+		// Insert new token
+		newTokenId := uint32(len(idToWord))
+
+		idToWord = append(idToWord, newToken)
+		wordToId[newToken] = newTokenId
+		merges = append(merges, TMerges{top.Pair, newTokenId})
+
+		// Merge the new pair in every words
+		type TChange struct {
+			WChange WChange
+			WIndex  int
+		}
+		var changes []TChange
+		for i, _ := range top.Pos {
+			// NOTE: words []Word
+			// TODO: merge each of these words concurrently
+			w := words[i]
+			wChanges, err := w.Merge(*top.Pair.C1, *top.Pair.C2, newTokenId)
+			if err != nil {
+				fmt.Println(err)
+			}
+			for _, wc := range wChanges {
+				changes = append(changes, TChange{wc, int(i)})
+			}
+
+		}
+
+		// Introduce new formed pairs
+		for _, tc := range changes {
+			count := tc.WChange.Change
+			pair := Pair{tc.WChange.C1, tc.WChange.C2}
+
+			c, _ := pairCounts[pair]
+			c += uint32(count)
+			pairCounts[pair] = c
+
+			if tc.WChange.Change > 0 {
+				var hs UintSet
+				if h, ok := whereToUpdate[pair]; ok {
+					h[uint(tc.WIndex)] = struct{}{}
+					hs = h
+				} else {
+					// if not existing, we create new one anyway
+					h[uint(tc.WIndex)] = struct{}{}
+					hs = h
+				}
+
+				whereToUpdate[pair] = hs
+			}
+		}
+
+		for pair, pos := range whereToUpdate {
+			count := pairCounts[pair]
+
+			if count > 0 {
+				queue.Push(TMerge{
+					pair, count, pos,
+				})
+			}
+		}
+
+		// TODO: update progress bar by 1
+
+	} // end of `for` loop
+
+	bt.finalizeProgress(progress, uint(len(merges)))
+
+	var builder *BpeBuilder
+	builder = NewBpeBuilder()
+
+	var newMerges Merges
+	for i, m := range merges {
+		pairVal := PairVal{
+			uint32(i),
+			m.PairVal,
+		}
+		newMerges[m.Pair] = pairVal
+	}
+
+	builder.VocabAndMerges(wordToId, newMerges)
+
+	if prefix := bt.ContinuingSubwordPrefix; prefix != nil {
+		builder.ContinuingSubwordPrefix(*prefix)
+	}
+
+	if suffix := bt.EndOfWordSuffix; suffix != nil {
+		builder.EndOfWordSuffix(*suffix)
+	}
+
+	bpe, err := builder.Build()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return *bpe, bt.SpecialTokens
+
+}
+
+// implement Trainer interface for BpeTrainer
+
+// Train a BPE model
+func (bt *BpeTrainer) train(wordCounts map[string]uint32) (BPE, []string) {
+	return bt.Train(wordCounts)
+}
+
+// Process a bunch of toke, counting them
+func (bt *BpeTrainer) processTokens(words map[string]uint32, tokens []string) {
+	for _, token := range tokens {
+		c, _ := words[token]
+		c += 1
+		words[token] = c
+	}
+}
+
+// Whether we should show progress
+func (bt *BpeTrainer) shouldShowProgress() bool {
+	return bt.ShowProgress
 }
