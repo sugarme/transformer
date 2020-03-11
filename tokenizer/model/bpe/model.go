@@ -110,7 +110,9 @@ func (bb *BpeBuilder) Build() (*BPE, error) {
 		bpe    BPE
 	)
 	// validate dropout
-	if p := *bb.Config.Dropout; &p != nil {
+	if bb.Config.Dropout != nil {
+		var p float32
+		p = *bb.Config.Dropout
 		if p <= 0.0 || p > 1.0 {
 			err = errors.New("Error: Invalid dropout.")
 			return nil, err

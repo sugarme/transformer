@@ -2,6 +2,7 @@ package bpe
 
 import (
 	"errors"
+	// "fmt"
 	"math/rand"
 
 	"github.com/emirpasic/gods/trees/binaryheap"
@@ -102,7 +103,8 @@ type Word struct {
 
 func NewWord() *Word {
 	return &Word{
-		Symbols: Symbols{},
+		// Symbols: Symbols{},
+		Symbols: []Symbol{},
 	}
 }
 
@@ -113,6 +115,9 @@ func (w *Word) Add(c uint32) {
 	)
 
 	len := len(w.Symbols)
+	if len == 0 {
+		return
+	}
 	last = w.Symbols[len-1]
 	if last.Next != nil {
 		// update `next` on previous one

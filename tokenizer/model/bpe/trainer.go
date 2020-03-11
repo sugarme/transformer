@@ -264,8 +264,10 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 	// NOTE: bp is progress bar.
 	// TODO: update bp to specific progress bar type
 
-	words := make([]Word, len(wc))
-	counts := make([]uint32, len(wc))
+	// words := make([]Word, len(wc))
+	// counts := make([]uint32, len(wc))
+	var words []Word
+	var counts []uint32
 
 	for word, count := range wc {
 		var currentWord Word
@@ -281,12 +283,16 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 				if i > 0 && i < len(chars)-1 {
 					if prefix := bt.ContinuingSubwordPrefix; prefix != nil {
 						s = fmt.Sprintf("%v%v", &prefix, c)
+					} else {
+						s = c
 					}
 				}
 				// Add the `endOfWordSuffix` if relevant
 				if i == len(chars)-1 { // last `char`
 					if suffix := bt.EndOfWordSuffix; suffix != nil {
 						s = fmt.Sprintf("%v%v", &suffix, c)
+					} else {
+						s = c
 					}
 				}
 
@@ -296,7 +302,10 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 					w2id[s] = uint32(len(id2w) - 1)
 				}
 
+				fmt.Println(w2id[s])
+
 				currentWord.Add(w2id[s])
+
 			}
 		} // end loop of `chars`
 
@@ -324,12 +333,13 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 	}
 
 	var wg sync.WaitGroup
+	wg.Add(n)
 	for i, j := 0, size; i < n; i, j = j, j+size {
 		if j > n {
 			j = n
 		}
 
-		wg.Add(1)
+		// wg.Add(1)
 
 		go func(i, j int) {
 			for k := i; k < j; k++ {
@@ -405,16 +415,22 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	// 3. Tokenize words
 	bt.updateProgress(progress, uint(len(wordCounts)), "Tokenize word")
 
+	// fmt.Println(wordCounts)
+	// fmt.Println(wordToId)
+	// fmt.Println(idToWord)
+
 	words, counts := bt.tokenizeWords(wordCounts, wordToId, idToWord, progress)
 
 	bt.finalizeProgress(progress, uint(len(words)))
+	fmt.Println(words)
+	// fmt.Println(counts)
 
 	// 4. Count pairs in words
 	bt.updateProgress(progress, uint(len(words)), "Count pairs")
 
 	var (
-		pairCounts    map[Pair]uint32
-		whereToUpdate map[Pair]UintSet
+		pairCounts    map[Pair]uint32  = make(map[Pair]uint32)
+		whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet)
 	)
 
 	pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
