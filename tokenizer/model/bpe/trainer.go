@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/emirpasic/gods/trees/binaryheap"
+	"github.com/emirpasic/gods/utils"
 	// 800 stars
 	// progressbar "github.com/schollz/progressbar/v2"
 	// 2.2 stars
@@ -302,8 +303,6 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 					w2id[s] = uint32(len(id2w) - 1)
 				}
 
-				fmt.Println(w2id[s])
-
 				currentWord.Add(w2id[s])
 
 			}
@@ -349,8 +348,10 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 				var window = 2
 				for x := 0; i < len(word.Symbols)-1; x += window - 1 {
 					y := x + window
-					if y >= len(word.Symbols) {
-						y = len(word.Symbols)
+					if y > len(word.Symbols) {
+						// TODO: should we stop when last chunk < chunk size or we just return it
+						break
+						// y = len(word.Symbols)
 					}
 
 					w := word.Symbols[x:y]
@@ -368,7 +369,7 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 					// Then update counts
 					count := counts[k]
 					// hashset map[uint]struct{}
-					var hs UintSet
+					var hs UintSet = make(map[uint]struct{})
 					if h, ok := whereToUpdate[pair]; ok {
 						h[uint(k)] = struct{}{} // found. Modify it
 					} else {
@@ -415,15 +416,9 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	// 3. Tokenize words
 	bt.updateProgress(progress, uint(len(wordCounts)), "Tokenize word")
 
-	// fmt.Println(wordCounts)
-	// fmt.Println(wordToId)
-	// fmt.Println(idToWord)
-
 	words, counts := bt.tokenizeWords(wordCounts, wordToId, idToWord, progress)
 
 	bt.finalizeProgress(progress, uint(len(words)))
-	fmt.Println(words)
-	// fmt.Println(counts)
 
 	// 4. Count pairs in words
 	bt.updateProgress(progress, uint(len(words)), "Count pairs")
@@ -435,11 +430,19 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 
 	pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
 
-	// insert them to the queue
-	var queue = binaryheap.NewWithIntComparator()
+	// countComparator sort heap descendingly by `Count` field of TMerge struct
+	countComparator := func(a, b interface{}) int {
+		c1 := a.(TMerge).Count
+		c2 := b.(TMerge).Count
+		return utils.UInt32Comparator(c2, c1)
+	}
 
+	var queue = binaryheap.NewWith(countComparator)
+
+	// insert them to the queue
 	for pair, pos := range whereToUpdate {
 		if count, ok := pairCounts[pair]; ok {
+			// fmt.Printf("pair: %v - count: %v - pos: %v\n", pair, count, pos)
 			queue.Push(TMerge{
 				Pair:  pair,
 				Count: count,
@@ -447,6 +450,9 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			})
 		}
 	}
+
+	fmt.Println(queue.String())
+
 	bt.finalizeProgress(progress, uint(len(words)))
 
 	// 5. Do merges
@@ -462,15 +468,21 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	for {
 		// Stop as soon as we have a big enough vocabulary
 		if uint(len(wordToId)) >= bt.VocabSize {
+			fmt.Println("We have enough!")
 			break
 		}
 
 		if queue.Empty() {
+			fmt.Println("queue is empty")
 			break
 		}
 
 		t, _ := queue.Pop()
 		var top TMerge = t.(TMerge)
+
+		fmt.Printf("top.Count: %v\n", top.Count)
+		fmt.Printf("pairCounts: %v\n", pairCounts[top.Pair])
+
 		if top.Count != pairCounts[top.Pair] {
 			top.Count = pairCounts[top.Pair]
 			queue.Push(top)
@@ -479,11 +491,15 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		}
 
 		if top.Count < 1 || bt.MinFrequency > top.Count {
-			break
+			// break
+			continue
 		}
 
-		partA := idToWord[*top.Pair.C1]
-		partB := idToWord[*top.Pair.C2]
+		partA := idToWord[top.Pair.C1]
+		partB := idToWord[top.Pair.C2]
+
+		fmt.Printf("Part A: %v\n", partA)
+		fmt.Printf("Part B: %v\n", partB)
 
 		// Build new token
 		if prefix := bt.ContinuingSubwordPrefix; prefix != nil {
@@ -512,7 +528,7 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			// NOTE: words []Word
 			// TODO: merge each of these words concurrently
 			w := words[i]
-			wChanges, err := w.Merge(*top.Pair.C1, *top.Pair.C2, newTokenId)
+			wChanges, err := w.Merge(top.Pair.C1, top.Pair.C2, newTokenId)
 			if err != nil {
 				fmt.Println(err)
 			}

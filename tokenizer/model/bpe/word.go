@@ -2,8 +2,8 @@ package bpe
 
 import (
 	"errors"
-	// "fmt"
 	"math/rand"
+	"reflect"
 
 	"github.com/emirpasic/gods/trees/binaryheap"
 
@@ -60,10 +60,10 @@ func (m *Merge) Cmp(other *Merge) Ordering {
 }
 
 type Symbol struct {
-	C    *uint32
-	Prev *int
-	Next *int
-	Len  *uint
+	C    uint32
+	Prev int
+	Next int
+	Len  uint
 }
 
 // Some slice methods to manipulate slice struct Symbol
@@ -92,8 +92,8 @@ func (ss *Symbols) Remove(i int) error {
 }
 
 func (s *Symbol) MergeWith(other *Symbol, newC uint32) {
-	s.C = &newC
-	*s.Len += *other.Len
+	s.C = newC
+	s.Len += other.Len
 	s.Next = other.Next
 }
 
@@ -114,34 +114,36 @@ func (w *Word) Add(c uint32) {
 		last       Symbol
 	)
 
-	len := len(w.Symbols)
-	if len == 0 {
-		return
-	}
-	last = w.Symbols[len-1]
-	if last.Next != nil {
-		// update `next` on previous one
-		w.Symbols[len].Next = &len
-		prev = len - 1
-		next = -1
-	} else {
+	if reflect.ValueOf(w.Symbols).IsNil() {
 		prev = -1
 		next = -1
+	} else {
+		len := len(w.Symbols)
+		last = w.Symbols[len-1]
+		if reflect.ValueOf(last.Next).IsValid() {
+			prev = -1
+			next = -1
+		} else {
+			// update `next` on previous one
+			w.Symbols[len].Next = len
+			prev = len - 1
+			next = -1
+		}
 	}
 
 	var sLen uint = 1 // NOTE: assign 1 to a variable so that we can take address of it.
 
 	w.Symbols = append(w.Symbols, Symbol{
-		C:    &c,
-		Prev: &prev,
-		Next: &next,
-		Len:  &sLen,
+		C:    c,
+		Prev: prev,
+		Next: next,
+		Len:  sLen,
 	})
 }
 
 type Pair struct {
-	C1 *uint32
-	C2 *uint32
+	C1 uint32
+	C2 uint32
 }
 
 // PairVal holds pair's rank and NewId
@@ -151,8 +153,8 @@ type PairVal struct {
 }
 
 type WChange struct {
-	C1     *uint32
-	C2     *uint32
+	C1     uint32
+	C2     uint32
 	Change int32
 }
 
@@ -162,7 +164,7 @@ func (w *Word) Merge(c1, c2, replacement uint32) ([]WChange, error) {
 	for i := 0; i < len(w.Symbols); i++ {
 
 		// found a pair
-		if w.Symbols[i].C == &c1 && (i+1) < len(w.Symbols) && w.Symbols[i+1].C == &c2 {
+		if w.Symbols[i].C == c1 && (i+1) < len(w.Symbols) && w.Symbols[i+1].C == c2 {
 			first := w.Symbols[i]
 			second := w.Symbols[i+1]
 
@@ -175,18 +177,18 @@ func (w *Word) Merge(c1, c2, replacement uint32) ([]WChange, error) {
 				})
 				changes = append(changes, WChange{
 					C1:     w.Symbols[i-1].C,
-					C2:     &replacement,
+					C2:     replacement,
 					Change: 1,
 				})
 			}
 
 			// Remove in place
-			newLen := *first.Len + *second.Len
+			newLen := first.Len + second.Len
 			newS := Symbol{
-				C:    &replacement,
+				C:    replacement,
 				Prev: first.Prev,
 				Next: second.Next,
-				Len:  &newLen,
+				Len:  newLen,
 			}
 
 			// Insert replacement before first `char` of pair
@@ -214,7 +216,7 @@ func (w *Word) Merge(c1, c2, replacement uint32) ([]WChange, error) {
 					Change: -1,
 				})
 				changes = append(changes, WChange{
-					C1:     &replacement,
+					C1:     replacement,
 					C2:     w.Symbols[i+1].C,
 					Change: 1,
 				})
@@ -272,13 +274,13 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 				queue.Push(s)
 			}
 
-			if *(w.Symbols[top.(Merge).Pos]).Len > 0 {
-				if *(w.Symbols[top.(Merge).Pos]).Next == -1 {
+			if (w.Symbols[top.(Merge).Pos]).Len > 0 {
+				if (w.Symbols[top.(Merge).Pos]).Next == -1 {
 					// Do nothing if the last symbol
 					continue // TODO: do we skip one from outer loop?
 				}
 
-				nextPos := uint(*w.Symbols[top.(Merge).Pos].Next)
+				nextPos := uint(w.Symbols[top.(Merge).Pos].Next)
 				right := w.Symbols[nextPos]
 
 				// Make sure we are not processing an expired queue entry
@@ -294,27 +296,27 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 				// Otherwise, let's merge
 				w.Symbols[top.(Merge).Pos].MergeWith(&right, top.(Merge).NewId)
 				// Tag the right part as removed
-				*w.Symbols[top.(Merge).Pos].Len = 0
+				w.Symbols[top.(Merge).Pos].Len = 0
 
 				// Update `prev` on the new `next` to the current pos
-				if *right.Next > -1 && *right.Next < len(w.Symbols) {
+				if right.Next > -1 && right.Next < len(w.Symbols) {
 					// create a variable so that we can asign an address.
 					pos := int(top.(Merge).Pos)
-					w.Symbols[*right.Next].Prev = &pos
+					w.Symbols[right.Next].Prev = pos
 				}
 
 				// Insert the new pair formed with the previous symbol
 				current := w.Symbols[top.(Merge).Pos]
-				if *current.Prev >= 0 {
+				if current.Prev >= 0 {
 					prev := current.Prev
-					prevSymbol := w.Symbols[*prev]
+					prevSymbol := w.Symbols[prev]
 					newPair := Pair{
 						C1: prevSymbol.C,
 						C2: current.C,
 					}
 					if m, ok := merges[newPair]; ok {
 						queue.Push(Merge{
-							Pos:   uint(*current.Prev),
+							Pos:   uint(current.Prev),
 							Rank:  m.Rank,
 							NewId: m.NewId,
 						})
@@ -323,8 +325,8 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 
 				// Insert the new pair formed with the next symbol
 				next := current.Next
-				if int(*next) < len(w.Symbols) {
-					nextSymbol := w.Symbols[*next]
+				if int(next) < len(w.Symbols) {
+					nextSymbol := w.Symbols[next]
 					newPair := Pair{
 						C1: current.C,
 						C2: nextSymbol.C,
@@ -343,7 +345,7 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 
 	// Filter out the removed symbols
 	for i, _ := range w.Symbols {
-		if *w.Symbols[i].Len == 0 {
+		if w.Symbols[i].Len == 0 {
 			w.Symbols.Remove(i)
 		}
 	}
@@ -352,7 +354,7 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 func (w *Word) GetChars() []uint32 {
 	var res []uint32
 	for _, s := range w.Symbols {
-		res = append(res, *s.C)
+		res = append(res, s.C)
 	}
 	return res
 }
@@ -362,13 +364,13 @@ func (w *Word) GetOffsets() []tokenizer.Offsets {
 
 	var pos uint = 0
 	for _, s := range w.Symbols {
-		end := pos + *s.Len
+		end := pos + s.Len
 		offsets = append(offsets, tokenizer.Offsets{
 			Start: pos,
 			End:   end,
 		})
 
-		pos += *s.Len
+		pos += s.Len
 	}
 
 	return offsets

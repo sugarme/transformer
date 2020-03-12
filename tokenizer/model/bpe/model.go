@@ -278,7 +278,7 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 			return nil, nil, err
 		}
 
-		pair := Pair{&a, &b}
+		pair := Pair{a, b}
 		newToken := fmt.Sprintf("%v%v", parts[0], parts[1])
 		newId, ok := vocab[newToken]
 		if !ok {
