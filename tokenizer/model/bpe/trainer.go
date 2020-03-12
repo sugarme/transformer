@@ -202,12 +202,13 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 	for word, count := range wc {
 		chars := strings.Split(word, "")
 		for _, char := range chars {
-			var newCount uint = 0
 			// if char not existing, newCount will be zero
 			if newCount, ok := alphabet[char]; ok {
 				newCount += uint(count)
+				alphabet[char] = newCount
+			} else {
+				alphabet[char] = newCount
 			}
-			alphabet[char] = newCount
 		}
 	}
 
@@ -224,7 +225,7 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 	}
 	var kept []keptItem
 	for char, freq := range alphabet {
-		fmt.Printf("char: %v - freq: %v\n", char, freq)
+		// fmt.Printf("char: %v - freq: %v\n", char, freq)
 		kept = append(kept, keptItem{char, freq})
 	}
 
@@ -242,7 +243,7 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 
 	// remove the unwanted `chars`
 	if toRemove > 0 {
-		// 1. Sort kept by char alphabetically?
+		// 1. Sort `kept` by char alphabetically?
 		// TODO: double-check this (sort by char or freq? asc or desc)
 		sort.Slice(kept, func(i, j int) bool {
 			return kept[i].Char < kept[j].Char
@@ -257,7 +258,7 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 		return kept[i].Freq < kept[j].Freq
 	})
 
-	fmt.Println(kept)
+	// fmt.Println(kept)
 
 	for _, k := range kept {
 		if _, ok := w2id[k.Char]; !ok {
@@ -281,6 +282,7 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 
 	for word, count := range wc {
 		var currentWord Word
+
 		counts = append(counts, count)
 
 		chars := strings.Split(word, "")
@@ -308,8 +310,10 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 
 				// Insert the new formed string if neccessary
 				if _, ok := w2id[s]; !ok {
-					id2w = append(id2w, s)
-					w2id[s] = uint32(len(id2w) - 1)
+					// id2w = append(id2w, s)
+					// w2id[s] = uint32(len(id2w) - 1)
+					// fmt.Printf("1.id2Word: length %v - values:  %v\n", len(id2w), id2w)
+					// fmt.Printf("2.word2Id: length %v - %v\n", len(w2id), w2id)
 				}
 
 				currentWord.Add(w2id[s])
@@ -422,11 +426,15 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	// 2. Compute the initial alphabet
 	fmt.Println(wordCounts)
 	wordToId, idToWord = bt.computeAlphabet(wordCounts)
+	fmt.Printf("Before id2Word: length %v - values:  %v\n", len(idToWord), idToWord)
+	fmt.Printf("Before word2Id: length %v - %v\n", len(wordToId), wordToId)
 
 	// 3. Tokenize words
 	bt.updateProgress(progress, uint(len(wordCounts)), "Tokenize word")
 
 	words, counts := bt.tokenizeWords(wordCounts, wordToId, idToWord, progress)
+	fmt.Printf("After id2Word: length %v - values:  %v\n", len(idToWord), idToWord)
+	fmt.Printf("After word2Id: length %v - %v\n", len(wordToId), wordToId)
 
 	bt.finalizeProgress(progress, uint(len(words)))
 
@@ -474,6 +482,7 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	var merges []TMerges
 
 	for {
+		fmt.Println(len(wordToId))
 		// Stop as soon as we have a big enough vocabulary
 		if uint(len(wordToId)) >= bt.VocabSize {
 			fmt.Println("We have enough!")
@@ -488,9 +497,6 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		t, _ := queue.Pop()
 		var top TMerge = t.(TMerge)
 
-		// fmt.Printf("top.Count: %v\n", top.Count)
-		// fmt.Printf("pairCounts: %v\n", pairCounts[top.Pair])
-
 		if top.Count != pairCounts[top.Pair] {
 			top.Count = pairCounts[top.Pair]
 			queue.Push(top)
@@ -502,14 +508,8 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			break
 		}
 
-		fmt.Printf("id2Word: %v\n", idToWord)
-		fmt.Printf("Top pair: %v\n", top.Pair)
-
 		partA := idToWord[top.Pair.C1]
 		partB := idToWord[top.Pair.C2]
-
-		fmt.Printf("Part A: %v\n", partA)
-		fmt.Printf("Part B: %v\n", partB)
 
 		// Build new token
 		if prefix := bt.ContinuingSubwordPrefix; prefix != nil {
@@ -527,6 +527,8 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		idToWord = append(idToWord, newToken)
 		wordToId[newToken] = newTokenId
 		merges = append(merges, TMerges{top.Pair, newTokenId})
+
+		fmt.Println(len(wordToId))
 
 		// Merge the new pair in every words
 		type TChange struct {
@@ -558,14 +560,12 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			pairCounts[pair] = c
 
 			if tc.WChange.Change > 0 {
-				var hs UintSet
-				if h, ok := whereToUpdate[pair]; ok {
-					h[uint(tc.WIndex)] = struct{}{}
-					hs = h
+				var hs UintSet = make(map[uint]struct{})
+				if _, ok := whereToUpdate[pair]; ok {
+					hs[uint(tc.WIndex)] = struct{}{}
 				} else {
 					// if not existing, we create new one anyway
-					h[uint(tc.WIndex)] = struct{}{}
-					hs = h
+					hs[uint(tc.WIndex)] = struct{}{}
 				}
 
 				whereToUpdate[pair] = hs
@@ -582,6 +582,8 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			}
 		}
 
+		fmt.Println(queue.Size())
+
 		// TODO: update progress bar by 1
 
 	} // end of `for` loop
@@ -591,7 +593,8 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	var builder *BpeBuilder
 	builder = NewBpeBuilder()
 
-	var newMerges Merges
+	var newMerges Merges = make(map[Pair]PairVal)
+
 	for i, m := range merges {
 		pairVal := PairVal{
 			uint32(i),
@@ -611,6 +614,7 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	}
 
 	bpe, err := builder.Build()
+
 	if err != nil {
 		fmt.Println(err)
 	}

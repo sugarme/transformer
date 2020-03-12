@@ -109,6 +109,10 @@ func (bb *BpeBuilder) Build() (*BPE, error) {
 		cache  *Cache
 		bpe    BPE
 	)
+
+	vocab = *bb.Config.Vocab
+	merges = *bb.Config.Merges
+
 	// validate dropout
 	if bb.Config.Dropout != nil {
 		var p float32

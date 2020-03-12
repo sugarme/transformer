@@ -21,11 +21,11 @@ func TestBpeTrainer_Train(t *testing.T) {
 	wordCounts["so"] = 1
 	wordCounts["GPT-2"] = 1
 
-	trainer := bpe.NewBpeTrainer(2, 100)
+	trainer := bpe.NewBpeTrainer(2, 30)
 
 	model, _ := trainer.Train(wordCounts)
 
-	got := model.Vocab
+	got := *model.Vocab
 
 	var want map[string]uint32 = make(map[string]uint32)
 	want["-"] = 0
