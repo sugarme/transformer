@@ -596,8 +596,9 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		fmt.Printf("Top: count = %v | pair: %v\n", top.Count, top.Pair)
 
 		if top.Count != pairCounts[top.Pair] {
-			top.Count = pairCounts[top.Pair]
+			pairCounts[top.Pair] = top.Count
 			queue.Push(top)
+			fmt.Println("Not found. Push new one...")
 
 			continue
 		}
@@ -649,9 +650,10 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		}
 
 		// Introduce new formed pairs
-		// Reset
+		// NOTE: reset `whereToUpdate` first
 		whereToUpdate = make(map[Pair]UintSet)
 		for _, tc := range changes {
+			// count := tc.WChange.Change * int32(counts[i])
 			count := tc.WChange.Change
 			pair := Pair{tc.WChange.C1, tc.WChange.C2}
 
