@@ -21,7 +21,7 @@ func TestBpeTrainer_Train(t *testing.T) {
 	wordCounts["so"] = 1
 	wordCounts["GPT-2"] = 1
 
-	trainer := bpe.NewBpeTrainer(2, 30)
+	trainer := bpe.NewBpeTrainer(2, 100)
 
 	model, _ := trainer.Train(wordCounts)
 

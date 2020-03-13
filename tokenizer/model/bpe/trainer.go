@@ -190,7 +190,7 @@ func (bt *BpeTrainer) addSpecialTokens(w2id map[string]uint32, id2w []string) {
 	}
 }
 
-// computeAlphabet computes the initial alphabet and limit it if relevant
+// computeAlphabet generate maps of `chars` from input words and limit it if relevant
 func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string]uint32, IdToWord []string) {
 	// compute the alphabet from seen words
 	var (
@@ -224,8 +224,14 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 		Freq uint
 	}
 	var kept []keptItem
-	for char, freq := range alphabet {
-		// fmt.Printf("char: %v - freq: %v\n", char, freq)
+	// NOTE: alphabet map need to be sorted first
+	keys := make([]string, 0)
+	for k, _ := range alphabet {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, char := range keys {
+		freq := alphabet[char]
 		kept = append(kept, keptItem{char, freq})
 	}
 
@@ -252,13 +258,15 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 		kept = kept[:toRemove]
 	}
 
-	// Keep the initial alphabet (sorted by determinism)
-	sort.Slice(kept, func(i, j int) bool {
-		// sort by freq
-		return kept[i].Freq < kept[j].Freq
-	})
+	// // Keep the initial alphabet (sorted by determinism)
+	// sort.Slice(kept, func(i, j int) bool {
+	// // sort by freq
+	// return kept[i].Freq > kept[j].Freq
+	// })
 
-	// fmt.Println(kept)
+	sort.Slice(kept, func(i, j int) bool {
+		return kept[i].Char < kept[j].Char
+	})
 
 	for _, k := range kept {
 		if _, ok := w2id[k.Char]; !ok {
@@ -267,11 +275,19 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 		}
 	}
 
+	// // Print out `char` and its `freq` to check
+	// // TODO: delete this block
+	// for _, v := range kept {
+	// fmt.Printf("char: %v %v\n", v.Char, v.Freq)
+	// }
+	// fmt.Println(w2id)
+	// fmt.Println(id2w)
+
 	return w2id, id2w
 }
 
-// tokenizerWord tokenizes words and adds subwords to the vocabulary when relevant
-func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32, id2w []string, pb interface{}) ([]Word, []uint32) {
+// tokenizerWord tokenizes words and adds subwords (prefix, suffix) to the vocabulary when relevant
+func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32, id2w []string, pb interface{}) ([]Word, []uint32, map[string]uint32, []string) {
 	// NOTE: bp is progress bar.
 	// TODO: update bp to specific progress bar type
 
@@ -280,7 +296,11 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 	var words []Word
 	var counts []uint32
 
-	for word, count := range wc {
+	keys := sortedKeys(wc)
+
+	for _, word := range keys {
+		// for word, count := range wc {
+		count := wc[word]
 		var currentWord Word
 
 		counts = append(counts, count)
@@ -290,14 +310,16 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 		for i, c := range chars {
 			var s string
 			if _, ok := w2id[c]; ok {
-				// Found the initial char in the authorized alphabet
 				// Add the `continuingSubwordPrefix` if relevant
-				if i > 0 && i < len(chars)-1 {
+				if i == 0 { // first `char`
 					if prefix := bt.ContinuingSubwordPrefix; prefix != nil {
 						s = fmt.Sprintf("%v%v", &prefix, c)
 					} else {
 						s = c
 					}
+				}
+				if i > 0 && i < len(chars)-1 {
+					s = c
 				}
 				// Add the `endOfWordSuffix` if relevant
 				if i == len(chars)-1 { // last `char`
@@ -310,15 +332,14 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 
 				// Insert the new formed string if neccessary
 				if _, ok := w2id[s]; !ok {
-					// id2w = append(id2w, s)
-					// w2id[s] = uint32(len(id2w) - 1)
-					// fmt.Printf("1.id2Word: length %v - values:  %v\n", len(id2w), id2w)
-					// fmt.Printf("2.word2Id: length %v - %v\n", len(w2id), w2id)
+					id2w = append(id2w, s)
+					w2id[s] = uint32(len(id2w) - 1)
+					currentWord.Add(w2id[s])
+				} else {
+					currentWord.Add(w2id[s])
 				}
-
-				currentWord.Add(w2id[s])
-
 			}
+
 		} // end loop of `chars`
 
 		words = append(words, currentWord)
@@ -327,7 +348,12 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 
 	} // end loop of `wc`
 
-	return words, counts
+	// fmt.Println(w2id)
+	// fmt.Println(id2w)
+	// fmt.Println(words)
+	// fmt.Println(counts)
+
+	return words, counts, w2id, id2w
 
 }
 
@@ -412,6 +438,58 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 
 }
 
+// coutPairsM counts frequency of pairs not using concurrency/paralellism
+func (bt *BpeTrainer) countPairsM(words []Word, counts []uint32, progress interface{}) (map[Pair]uint32, map[Pair]UintSet) {
+
+	var pairCounts map[Pair]uint32 = make(map[Pair]uint32, bt.VocabSize*2)
+	var whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet, bt.VocabSize*2)
+
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+		var window = 2
+		for x := 0; i < len(word.Symbols)-1; x += window - 1 {
+			y := x + window
+			if y > len(word.Symbols) {
+				// TODO: should we stop when last chunk < chunk size or we just return it
+				break
+				// y = len(word.Symbols)
+			}
+
+			w := word.Symbols[x:y]
+			pair := Pair{
+				C1: w[0].C,
+				C2: w[1].C,
+			}
+
+			// Initialize pairCounts and whereToUpdate for this pair
+			// if it is not existing in the map
+			if _, ok := pairCounts[pair]; !ok {
+				pairCounts[pair] = 0
+			}
+
+			// hashset map[uint]struct{}
+			var hs UintSet = make(map[uint]struct{})
+			if h, ok := whereToUpdate[pair]; !ok {
+				// create a new
+				hs[uint(i)] = struct{}{}
+				whereToUpdate[pair] = hs
+			} else {
+				whereToUpdate[pair] = h
+			}
+
+			// Then update counts
+			count := counts[i]
+			pairCounts[pair] += count
+		}
+	} // end of `for` loop
+
+	fmt.Printf("pairCounts: %v\n", pairCounts)
+	fmt.Printf("whereToUpdate: %v\n", whereToUpdate)
+
+	return pairCounts, whereToUpdate
+
+}
+
 func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	var (
 		wordToId map[string]uint32 = make(map[string]uint32)
@@ -423,22 +501,26 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	// 1. Add all special tokens to the vocabular
 	bt.addSpecialTokens(wordToId, idToWord)
 
-	// 2. Compute the initial alphabet
-	fmt.Println(wordCounts)
+	// 2. Compute the initial alphabet (create maps of `chars`)
+	// These maps will be updated if `prefix`, `suffix` are added
+	// in the following steps
 	wordToId, idToWord = bt.computeAlphabet(wordCounts)
-	fmt.Printf("Before id2Word: length %v - values:  %v\n", len(idToWord), idToWord)
-	fmt.Printf("Before word2Id: length %v - %v\n", len(wordToId), wordToId)
+	// fmt.Printf("Before id2Word: length %v - values:  %v\n", len(idToWord), idToWord)
+	// fmt.Printf("Before word2Id: length %v - %v\n", len(wordToId), wordToId)
 
-	// 3. Tokenize words
+	// 3. Tokenize words (add prefix, suffix to the map if relevant)
+	// NOTE: `char` maps (wordToId, idToWord) will be updated if added prefix and/or suffix
 	bt.updateProgress(progress, uint(len(wordCounts)), "Tokenize word")
 
-	words, counts := bt.tokenizeWords(wordCounts, wordToId, idToWord, progress)
-	fmt.Printf("After id2Word: length %v - values:  %v\n", len(idToWord), idToWord)
-	fmt.Printf("After word2Id: length %v - %v\n", len(wordToId), wordToId)
+	words, counts, wordToId, idToWord := bt.tokenizeWords(wordCounts, wordToId, idToWord, progress)
 
 	bt.finalizeProgress(progress, uint(len(words)))
 
 	// 4. Count pairs in words
+	// words will be split to `char`, paired and count their frequency.
+	// The result will be a map of (pairs and their frequency) and
+	// a map of (pairs and their uint32 hashset - which is a map of key with no value)
+	// represent a position to update pair.
 	bt.updateProgress(progress, uint(len(words)), "Count pairs")
 
 	var (
@@ -446,7 +528,10 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet)
 	)
 
-	pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
+	// pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
+	pairCounts, whereToUpdate = bt.countPairsM(words, counts, progress)
+
+	// 5. Do merges
 
 	// countComparator sort heap descendingly by `Count` field of TMerge struct
 	countComparator := func(a, b interface{}) int {
@@ -470,8 +555,6 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	}
 
 	bt.finalizeProgress(progress, uint(len(words)))
-
-	// 5. Do merges
 	bt.updateProgress(progress, bt.VocabSize, "Compute merges")
 
 	type TMerges struct {
@@ -481,8 +564,21 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 
 	var merges []TMerges
 
+	fmt.Printf("Word2ID before merge loop: %v\n", wordToId)
+
+	// // Print out token and freq after tokenization
+	// for n := 0; n <= queue.Size(); n++ {
+	// if v, ok := queue.Pop(); ok {
+	// merge := v.(TMerge)
+	// count := merge.Count
+	// tok := merge.Pair
+	// fmt.Printf("Token: %v - Freq: %v\n", tok, count)
+	// }
+	// }
+
+	// for i := 0; i < 50; i++ {
 	for {
-		fmt.Println(len(wordToId))
+		// fmt.Println(len(wordToId))
 		// Stop as soon as we have a big enough vocabulary
 		if uint(len(wordToId)) >= bt.VocabSize {
 			fmt.Println("We have enough!")
@@ -497,6 +593,8 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		t, _ := queue.Pop()
 		var top TMerge = t.(TMerge)
 
+		fmt.Printf("Top: count = %v | pair: %v\n", top.Count, top.Pair)
+
 		if top.Count != pairCounts[top.Pair] {
 			top.Count = pairCounts[top.Pair]
 			queue.Push(top)
@@ -504,7 +602,8 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			continue
 		}
 
-		if top.Count < 1 || bt.MinFrequency > top.Count {
+		if top.Count < 1 || top.Count < bt.MinFrequency {
+			fmt.Println("We stop bcause top count is hit limit")
 			break
 		}
 
@@ -520,6 +619,7 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		}
 
 		newToken := fmt.Sprintf("%v%v", partA, partB)
+		fmt.Printf("new token: %v\n", newToken)
 
 		// Insert new token
 		newTokenId := uint32(len(idToWord))
@@ -528,14 +628,12 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		wordToId[newToken] = newTokenId
 		merges = append(merges, TMerges{top.Pair, newTokenId})
 
-		fmt.Println(len(wordToId))
-
-		// Merge the new pair in every words
 		type TChange struct {
 			WChange WChange
 			WIndex  int
 		}
 		var changes []TChange
+		// Merge the new pair in every words
 		for i, _ := range top.Pos {
 			// NOTE: words []Word
 			// TODO: merge each of these words concurrently
@@ -551,6 +649,8 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		}
 
 		// Introduce new formed pairs
+		// Reset
+		whereToUpdate = make(map[Pair]UintSet)
 		for _, tc := range changes {
 			count := tc.WChange.Change
 			pair := Pair{tc.WChange.C1, tc.WChange.C2}
@@ -574,15 +674,12 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 
 		for pair, pos := range whereToUpdate {
 			count := pairCounts[pair]
-
 			if count > 0 {
 				queue.Push(TMerge{
 					pair, count, pos,
 				})
 			}
 		}
-
-		fmt.Println(queue.Size())
 
 		// TODO: update progress bar by 1
 
@@ -642,4 +739,15 @@ func (bt *BpeTrainer) processTokens(words map[string]uint32, tokens []string) {
 // Whether we should show progress
 func (bt *BpeTrainer) shouldShowProgress() bool {
 	return bt.ShowProgress
+}
+
+func sortedKeys(m map[string]uint32) []string {
+	keys := make([]string, len(m))
+	i := 0
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	return keys
 }
