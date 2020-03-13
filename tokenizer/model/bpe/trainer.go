@@ -447,7 +447,7 @@ func (bt *BpeTrainer) countPairsM(words []Word, counts []uint32, progress interf
 	for i := 0; i < len(words); i++ {
 		word := words[i]
 		var window = 2
-		for x := 0; i < len(word.Symbols)-1; x += window - 1 {
+		for x := 0; x < len(word.Symbols)-1; x += window - 1 {
 			y := x + window
 			if y > len(word.Symbols) {
 				// TODO: should we stop when last chunk < chunk size or we just return it
