@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/emirpasic/gods/trees/binaryheap"
 	"github.com/emirpasic/gods/utils"
@@ -25,6 +26,7 @@ type TMerge struct {
 	Pair  Pair
 	Count uint32
 	Pos   UintSet
+	Time  time.Time
 }
 
 // NOTE: there exists `Config`
@@ -238,6 +240,7 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 	// compute the number of chars to remove from the alphabet
 	// if `limitAlphabet` < `len(initialAlphabet)` some of these
 	// initial characters will be removed.
+	// TODO: how we sort these characters before cutting off?
 	var toRemove int = 0
 	var limit int
 	if bt.LimitAlphabet != nil {
@@ -295,10 +298,12 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 	// counts := make([]uint32, len(wc))
 	var words []Word
 	var counts []uint32
+	var sortedWords []string
 
 	keys := sortedKeys(wc)
 
 	for _, word := range keys {
+		sortedWords = append(sortedWords, word)
 		// for word, count := range wc {
 		count := wc[word]
 		var currentWord Word
@@ -348,6 +353,7 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 
 	} // end loop of `wc`
 
+	fmt.Printf("Sorted original words: %v\n", sortedWords)
 	// fmt.Println(w2id)
 	// fmt.Println(id2w)
 	// fmt.Println(words)
@@ -357,7 +363,7 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 
 }
 
-// countPairs counts ...
+// coutPairs counts frequency of pairs (char pair) from input words and put into maps
 func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interface{}) (map[Pair]uint32, map[Pair]UintSet) {
 
 	var pairCounts map[Pair]uint32 = make(map[Pair]uint32, bt.VocabSize*2)
@@ -461,30 +467,36 @@ func (bt *BpeTrainer) countPairsM(words []Word, counts []uint32, progress interf
 				C2: w[1].C,
 			}
 
-			// Initialize pairCounts and whereToUpdate for this pair
-			// if it is not existing in the map
+			// Initialize pairCounts and whereToUpdate for this pair if it is not existing
+			// 1. `pairCounts` map
 			if _, ok := pairCounts[pair]; !ok {
 				pairCounts[pair] = 0
 			}
-
-			// hashset map[uint]struct{}
-			var hs UintSet = make(map[uint]struct{})
-			if h, ok := whereToUpdate[pair]; !ok {
-				// create a new
-				hs[uint(i)] = struct{}{}
-				whereToUpdate[pair] = hs
-			} else {
-				whereToUpdate[pair] = h
-			}
-
 			// Then update counts
 			count := counts[i]
 			pairCounts[pair] += count
+
+			// 2. `whereToUpdate` is a map of with
+			// - key	: a pair
+			// - value: a hashset (map[uint]struct{}). It keeps the index/indices of the word
+			// (in input words) where pair comes from.
+			// Hence: `whereToUpdate` maps which `word` from input words the pair comes from.
+			var hs UintSet = make(map[uint]struct{})
+			if h, ok := whereToUpdate[pair]; !ok {
+				// Not exisitng: create a new
+				hs[uint(i)] = struct{}{}
+				whereToUpdate[pair] = hs
+			} else {
+				// Found one: append one more index to it
+				h[uint(i)] = struct{}{}
+				whereToUpdate[pair] = h
+			}
+
 		}
 	} // end of `for` loop
 
-	fmt.Printf("pairCounts: %v\n", pairCounts)
-	fmt.Printf("whereToUpdate: %v\n", whereToUpdate)
+	// fmt.Printf("pairCounts: %v\n", pairCounts)
+	// fmt.Printf("whereToUpdate: %v\n", whereToUpdate)
 
 	return pairCounts, whereToUpdate
 
@@ -537,6 +549,14 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	countComparator := func(a, b interface{}) int {
 		c1 := a.(TMerge).Count
 		c2 := b.(TMerge).Count
+
+		if c1 == c2 {
+			aTime := a.(TMerge).Time
+			bTime := b.(TMerge).Time
+
+			return utils.TimeComparator(bTime, aTime)
+		}
+
 		return utils.UInt32Comparator(c2, c1)
 	}
 
@@ -545,7 +565,9 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 	// insert them to the queue
 	for pair, pos := range whereToUpdate {
 		if count, ok := pairCounts[pair]; ok {
-			// fmt.Printf("pair: %v - count: %v - pos: %v\n", pair, count, pos)
+			char1 := idToWord[pair.C1]
+			char2 := idToWord[pair.C2]
+			fmt.Printf("pair chars: %v%v - pair: %v - count: %v - pos: %v\n", char1, char2, pair, count, pos)
 			queue.Push(TMerge{
 				Pair:  pair,
 				Count: count,
@@ -608,6 +630,25 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			break
 		}
 
+		// If `pair` is no longer mapped in its origin word, skip merging
+		var skip bool = true
+		for p, _ := range top.Pos {
+			w := words[p]
+			c1 := top.Pair.C1
+			c2 := top.Pair.C2
+
+			for i := 0; i < len(w.Symbols); i++ {
+				// found it
+				if w.Symbols[i].C == c1 && (i+1) < len(w.Symbols) && w.Symbols[i+1].C == c2 {
+					skip = false
+				}
+			}
+		}
+
+		if skip {
+			continue
+		}
+
 		partA := idToWord[top.Pair.C1]
 		partB := idToWord[top.Pair.C2]
 
@@ -624,7 +665,6 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 
 		// Insert new token
 		newTokenId := uint32(len(idToWord))
-
 		idToWord = append(idToWord, newToken)
 		wordToId[newToken] = newTokenId
 		merges = append(merges, TMerges{top.Pair, newTokenId})
@@ -634,7 +674,7 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			WIndex  int
 		}
 		var changes []TChange
-		// Merge the new pair in every words
+		// Merge the new pair in word(s) that contains the current pair
 		for i, _ := range top.Pos {
 			// NOTE: words []Word
 			// TODO: merge each of these words concurrently
@@ -643,42 +683,56 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 			if err != nil {
 				fmt.Println(err)
 			}
+			// update back `words` list. Because after merging, word map may be changed.
+			words[i] = w
 			for _, wc := range wChanges {
 				changes = append(changes, TChange{wc, int(i)})
 			}
-
 		}
 
 		// Introduce new formed pairs
 		// NOTE: reset `whereToUpdate` first
 		whereToUpdate = make(map[Pair]UintSet)
 		for _, tc := range changes {
-			// count := tc.WChange.Change * int32(counts[i])
-			count := tc.WChange.Change
-			pair := Pair{tc.WChange.C1, tc.WChange.C2}
-
-			c, _ := pairCounts[pair]
-			c += uint32(count)
-			pairCounts[pair] = c
-
 			if tc.WChange.Change > 0 {
-				var hs UintSet = make(map[uint]struct{})
-				if _, ok := whereToUpdate[pair]; ok {
-					hs[uint(tc.WIndex)] = struct{}{}
+				count := tc.WChange.Change * int32(counts[tc.WIndex])
+
+				pair := Pair{tc.WChange.C1, tc.WChange.C2}
+
+				if _, ok := pairCounts[pair]; !ok {
+					pairCounts[pair] = uint32(count)
+					// fmt.Printf("pair: %v - count: %v\n", pair, count)
 				} else {
-					// if not existing, we create new one anyway
-					hs[uint(tc.WIndex)] = struct{}{}
+					c, _ := pairCounts[pair]
+					c += uint32(count)
+					pairCounts[pair] = c
+					// fmt.Printf("pair: %v - count: %v\n", pair, c)
 				}
 
-				whereToUpdate[pair] = hs
+				var hs UintSet = make(map[uint]struct{})
+				if h, ok := whereToUpdate[pair]; !ok {
+					// if not existing, we create new one anyway
+					hs[uint(tc.WIndex)] = struct{}{}
+					whereToUpdate[pair] = hs
+				} else {
+					// Existing, append one
+					h[uint(tc.WIndex)] = struct{}{}
+					whereToUpdate[pair] = h
+				}
 			}
 		}
 
+		fmt.Printf("length of whereToUpdate: %v\n", len(whereToUpdate))
+		fmt.Println(whereToUpdate)
+
 		for pair, pos := range whereToUpdate {
 			count := pairCounts[pair]
+			// char1 := idToWord[pair.C1]
+			// char2 := idToWord[pair.C2]
+			// fmt.Printf("pair chars: %v%v - pair: %v - count: %v - pos: %v\n", char1, char2, pair, count, pos)
 			if count > 0 {
 				queue.Push(TMerge{
-					pair, count, pos,
+					pair, count, pos, time.Now(),
 				})
 			}
 		}

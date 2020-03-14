@@ -2,6 +2,7 @@ package bpe_test
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	bpe "github.com/sugarme/sermo/tokenizer/model/bpe"
@@ -21,7 +22,7 @@ func TestBpeTrainer_Train(t *testing.T) {
 	wordCounts["so"] = 1
 	wordCounts["GPT-2"] = 1
 
-	trainer := bpe.NewBpeTrainer(2, 100)
+	trainer := bpe.NewBpeTrainer(2, 30)
 
 	model, _ := trainer.Train(wordCounts)
 
@@ -54,10 +55,36 @@ func TestBpeTrainer_Train(t *testing.T) {
 	want["are"] = 23
 	want["is"] = 24
 
-	if !reflect.DeepEqual(want, got) {
-
-		t.Errorf("Want: %v\n", want)
-		t.Errorf("Got: %v\n", got)
+	wKeys := sortedKeys(want)
+	gKeys := sortedKeys(got)
+	var (
+		sortedWant map[string]uint32 = make(map[string]uint32, len(want))
+		sortedGot  map[string]uint32 = make(map[string]uint32, len(got))
+	)
+	for _, k := range wKeys {
+		val := want[k]
+		sortedWant[k] = val
 	}
 
+	for _, k := range gKeys {
+		val := want[k]
+		sortedGot[k] = val
+	}
+
+	if !reflect.DeepEqual(sortedWant, sortedGot) {
+		t.Errorf("Want: %v\n", sortedWant)
+		t.Errorf("Got: %v\n", sortedGot)
+	}
+
+}
+
+func sortedKeys(m map[string]uint32) []string {
+	keys := make([]string, len(m))
+	i := 0
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	return keys
 }
