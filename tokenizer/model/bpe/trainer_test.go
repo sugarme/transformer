@@ -26,7 +26,7 @@ func TestBpeTrainer_Train(t *testing.T) {
 
 	model, _ := trainer.Train(wordCounts)
 
-	got := *model.Vocab
+	got := *model.(*bpe.BPE).Vocab
 
 	var want map[string]uint32 = make(map[string]uint32)
 	want["-"] = 0

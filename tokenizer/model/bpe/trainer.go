@@ -518,6 +518,25 @@ func (bt *BpeTrainer) WithProgressBar() bool {
 // 1. BPE model; 2. merges
 // func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (tokenizer.Model, []string) {
+
+	model, merges := bt.train(wordCounts)
+
+	return model.(tokenizer.Model), merges
+
+}
+
+// Process a bunch of toke, counting them
+func (bt *BpeTrainer) ProcessTokens(words map[string]uint32, tokens []string) {
+	for _, token := range tokens {
+		c, _ := words[token]
+		c += 1
+		words[token] = c
+	}
+}
+
+// Train a BPE model
+func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string) {
+	// return bt.Train(wordCounts)
 	var (
 		wordToId map[string]uint32 = make(map[string]uint32)
 		idToWord []string
@@ -788,21 +807,6 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (tokenizer.Model, []st
 	}
 
 	return bpe, bt.SpecialTokens
-
-}
-
-// Process a bunch of toke, counting them
-func (bt *BpeTrainer) ProcessTokens(words map[string]uint32, tokens []string) {
-	for _, token := range tokens {
-		c, _ := words[token]
-		c += 1
-		words[token] = c
-	}
-}
-
-// Train a BPE model
-func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string) {
-	return bt.Train(wordCounts)
 }
 
 // Whether we should show progress

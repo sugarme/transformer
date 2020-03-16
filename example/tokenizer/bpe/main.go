@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/sugarme/sermo/tokenizer"
@@ -26,4 +27,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Print out some data
+	// vocab := model.GetVocab()
+	trainedModel := tk.GetModel()
+	vocab := trainedModel.(*bpe.BPE).Vocab
+	merges := trainedModel.(*bpe.BPE).Merges
+
+	fmt.Println(vocab)
+	fmt.Println(*merges)
 }

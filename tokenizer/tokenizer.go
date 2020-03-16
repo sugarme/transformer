@@ -71,6 +71,7 @@ type Trainer interface {
 	// Actual training method. It will return a trained model and
 	// a list of `special tokens` to be added directly to the tokenizer
 	// along with the model
+	// Train(words map[string]uint32) (Model, []string)
 	Train(words map[string]uint32) (Model, []string)
 	// ProcessTokens processes a bunch of tokens and counts them as relevant
 	ProcessTokens(words map[string]uint32, tokens []string)
