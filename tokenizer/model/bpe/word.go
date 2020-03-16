@@ -120,7 +120,11 @@ func (w *Word) Add(c uint32) {
 		next = -1
 	} else {
 		len := len(w.Symbols)
-		last = w.Symbols[len-1]
+		if len == 0 {
+			last = Symbol{}
+		} else {
+			last = w.Symbols[len-1]
+		}
 		if reflect.ValueOf(last.Next).IsValid() {
 			prev = -1
 			next = -1

@@ -208,6 +208,19 @@ func (b *BPE) clone() {
 	b = newBpe
 }
 
+// NewBPE create a default BPE from sratch using its pbeBuilder
+func NewBPE() (*BPE, error) {
+	b := NewBpeBuilder()
+	return b.Build()
+}
+
+// NewBpeFromFiles create BPE model from vocab and merges files
+func NewBpeFromFiles(vocab, merges string) (*BPE, error) {
+	b := NewBpeBuilder()
+	b.Files(vocab, merges)
+	return b.Build()
+}
+
 // New creates new BPE model with given vocab and merges
 func (b *BPE) New(vocab Vocab, merges Merges) {
 	b.new()
@@ -216,7 +229,7 @@ func (b *BPE) New(vocab Vocab, merges Merges) {
 }
 
 // FromFile creates `BpeBuilder` from vocab and merges files.
-func (b *BPE) FromFile(vocab string, merges string) *BpeBuilder {
+func (b *BPE) FromFiles(vocab string, merges string) *BpeBuilder {
 	builder := b.builder()
 	builder.Files(vocab, merges)
 	return builder
@@ -266,19 +279,19 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 
 		parts := strings.Split(line, " ")
 		if len(parts) != 2 {
-			err = fmt.Errorf("Merges file error: invalid data at line %d\n", lineNum)
+			err = fmt.Errorf("Read merge file error: invalid data at line %d\n", lineNum)
 			return nil, nil, err
 		}
 
 		a, ok := vocab[parts[0]]
 		if !ok {
-			err = fmt.Errorf("Error: value for %s key not found.", parts[0])
+			err = fmt.Errorf("Read merge file error: value for %s key not found.", parts[0])
 			return nil, nil, err
 		}
 
 		b, ok := vocab[parts[1]]
 		if !ok {
-			err = fmt.Errorf("Error: value for %s key not found.", parts[0])
+			err = fmt.Errorf("Read merge file error: value for %s key not found.", parts[1])
 			return nil, nil, err
 		}
 
@@ -286,11 +299,13 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 		newToken := fmt.Sprintf("%v%v", parts[0], parts[1])
 		newId, ok := vocab[newToken]
 		if !ok {
-			err = fmt.Errorf("Error: value for %s key not found.", parts[0])
+			err = fmt.Errorf("Read merge file error: key value for token: \"%s\" not found.", newToken)
 			return nil, nil, err
 		}
 
 		newTokenInt, err := strconv.ParseInt(newToken, 10, 64)
+
+		err = util.TraceError(err)
 		if err != nil {
 			return nil, nil, err
 		}
