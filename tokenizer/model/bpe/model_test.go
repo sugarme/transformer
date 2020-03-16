@@ -50,8 +50,10 @@ func TestBPE_FromFiles(t *testing.T) {
 	defer os.Remove(mf.Name())
 
 	// 2.2. Write a bad line to it
+	// First line: `#version: 0.2` is ok
+	// Second line: `a b` is ok
+	// Third line `c` is invalid
 	badLine := []byte("#version: 0.2\na b\nc")
-	// badLine := []byte("#version: 0.2\na \nbc")
 	_, err = mf.Write(badLine)
 	if err != nil {
 		t.Errorf("Error: %v", err)

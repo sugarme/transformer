@@ -14,6 +14,8 @@ import (
 	// progressbar "github.com/schollz/progressbar/v2"
 	// 2.2 stars
 	// progressbar "github.com/cheggaaa/pb/v3"
+
+	"github.com/sugarme/sermo/tokenizer"
 )
 
 // Map with no value
@@ -502,7 +504,20 @@ func (bt *BpeTrainer) countPairsM(words []Word, counts []uint32, progress interf
 
 }
 
-func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
+// Implement Trainer interface. It has the following methods:
+// 1. WithProgressBar() bool
+// 2. Train(words map[string]uint32) (Model, []string)
+// 3. ProcessTokens(words map[string]uint32, tokens []string)
+
+func (bt *BpeTrainer) WithProgressBar() bool {
+	// TODO: implement a progress bar
+	return false
+}
+
+// Train trains bpe model on input wordCounts and returns
+// 1. BPE model; 2. merges
+// func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
+func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (tokenizer.Model, []string) {
 	var (
 		wordToId map[string]uint32 = make(map[string]uint32)
 		idToWord []string
@@ -772,24 +787,22 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 		fmt.Println(err)
 	}
 
-	return *bpe, bt.SpecialTokens
+	return bpe, bt.SpecialTokens
 
-}
-
-// implement Trainer interface for BpeTrainer
-
-// Train a BPE model
-func (bt *BpeTrainer) train(wordCounts map[string]uint32) (BPE, []string) {
-	return bt.Train(wordCounts)
 }
 
 // Process a bunch of toke, counting them
-func (bt *BpeTrainer) processTokens(words map[string]uint32, tokens []string) {
+func (bt *BpeTrainer) ProcessTokens(words map[string]uint32, tokens []string) {
 	for _, token := range tokens {
 		c, _ := words[token]
 		c += 1
 		words[token] = c
 	}
+}
+
+// Train a BPE model
+func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string) {
+	return bt.Train(wordCounts)
 }
 
 // Whether we should show progress

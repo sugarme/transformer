@@ -4,11 +4,10 @@ package tokenizer
 // TODO: full description
 
 import (
-	"fmt"
-	"log"
-	// "path/filepath"
 	"bufio"
 	"context"
+	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -48,7 +47,7 @@ type Model interface {
 	TokenToId(token string) uint32
 	IdToToken(id uint32) string
 	GetVocabSize() uint
-	Save(path string, name string) error
+	Save(path string, nameOpt ...string) error
 }
 
 type PostProcessor interface {
@@ -525,6 +524,12 @@ func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
 }
 
 // Train trains a model and replaces the current model using a given trainer
+// The tokenizer does the following steps
+// 1. Concurrently, reads training data (text) from files, normalizes text using
+// 		specified normalizer, and generates a slice of words and their frequency (count)
+// 2. Train tokenizer model using specified tokenizer configuration on slice of word-count
+//		generated from previous step to create `vocab` and `merges` data (files)
+// 3. Update current tokenizer with newly generated model (`vocab` and `merges` data)
 func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 	type Job struct {
 		File     string

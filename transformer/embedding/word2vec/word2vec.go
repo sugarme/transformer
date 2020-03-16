@@ -1,5 +1,4 @@
-//package word2vec provides functionality to import and
-// operate on word2vec generated model.
+//package word2vec provides functionality to import and operate on word2vec generated model.
 // Ref. https://github.com/danieldk/go2vec/blob/master/go2vec.go
 package word2vec
 

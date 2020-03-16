@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	// "strings"
 
 	"github.com/sugarme/sermo/normalizer"
 	"github.com/sugarme/sermo/tokenizer"

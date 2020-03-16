@@ -422,10 +422,12 @@ func (b *BPE) WordToTokens(word Word, initialOffsets tokenizer.Offsets) ([]token
 }
 
 // Implement Model interface for BPE
-func (b *BPE) GetVocabSize() uint {
-	vocabLen := len(*b.Vocab)
-	return uint(vocabLen)
-}
+// Model has the following methods:
+// 1. Tokenize(tokens []PreToken) ([]Token, error)
+// 2. TokenToId(token string) uint32
+// 3. IdToToken(id uint32) string
+// 4. GetVocabSize() uint
+// 5. Save(path string, name string) error
 
 // Tokenize tokenizes sentences into tokens
 // NOTE: sentence is []PreToken struct{Value string, Offsets Offsets}
@@ -514,6 +516,11 @@ func (b *BPE) TokenToId(token string) uint32 {
 
 func (b *BPE) IdToToken(id uint32) string {
 	return (*b.VocabR)[id]
+}
+
+func (b *BPE) GetVocabSize() uint {
+	vocabLen := len(*b.Vocab)
+	return uint(vocabLen)
 }
 
 func (b *BPE) Save(dir string, nameOpt ...string) error {
