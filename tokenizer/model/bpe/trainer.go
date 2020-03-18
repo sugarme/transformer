@@ -11,7 +11,7 @@ import (
 	"github.com/emirpasic/gods/trees/binaryheap"
 	"github.com/emirpasic/gods/utils"
 	// 800 stars
-	// progressbar "github.com/schollz/progressbar/v2"
+	progressbar "github.com/schollz/progressbar/v2"
 	// 2.2 stars
 	// progressbar "github.com/cheggaaa/pb/v3"
 
@@ -368,8 +368,14 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 // coutPairs counts frequency of pairs (char pair) from input words and put into maps
 func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interface{}) (map[Pair]uint32, map[Pair]UintSet) {
 
+	type pcResult struct {
+		PC map[Pair]uint32
+		WT map[Pair]UintSet
+	}
+
 	var pairCounts map[Pair]uint32 = make(map[Pair]uint32, bt.VocabSize*2)
 	var whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet, bt.VocabSize*2)
+	// var mutex = &sync.RWMutex{}
 
 	// Divide w into work units that take ~100μs-1ms to compute.
 	n := len(words)
@@ -378,20 +384,28 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 		size = 1
 	}
 
-	var wg sync.WaitGroup
+	resChan := make(chan pcResult)
+	// doneChan := make(chan (bool), 1)
 
+	var pcWG = new(sync.WaitGroup)
+	var agWG = new(sync.WaitGroup)
+
+	// pcWG.Add(n)
 	for i, j := 0, size; i < n; i, j = j, j+size {
 		if j > n {
 			j = n
 		}
 
-		wg.Add(1)
+		pcWG.Add(1)
 
 		go func(i, j int) {
+			defer pcWG.Done()
+			var pc map[Pair]uint32 = make(map[Pair]uint32, bt.VocabSize*2)
+			var wt map[Pair]UintSet = make(map[Pair]UintSet, bt.VocabSize*2)
+
 			for k := i; k < j; k++ {
 				// Do individual task here with index k
 				word := words[k]
-
 				var window = 2
 				for x := 0; i < len(word.Symbols)-1; x += window - 1 {
 					y := x + window
@@ -409,39 +423,67 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 
 					// Initialize pairCounts and whereToUpdate for this pair
 					// if we just seen it
-					if _, ok := pairCounts[pair]; !ok {
-						pairCounts[pair] = 0
+					if _, ok := pc[pair]; !ok {
+						pc[pair] = 0
 					}
 
 					// Then update counts
 					count := counts[k]
 					// hashset map[uint]struct{}
 					var hs UintSet = make(map[uint]struct{})
-					if h, ok := whereToUpdate[pair]; ok {
+					if h, ok := wt[pair]; ok {
 						h[uint(k)] = struct{}{} // found. Modify it
 					} else {
 						// create a new
 						hs[uint(k)] = struct{}{}
-						whereToUpdate[pair] = hs
+						wt[pair] = hs
 					}
 
-					pairCounts[pair] += count
+					pc[pair] += count
 				}
 
 				// TODO: update progress bar
 
-				wg.Done()
 			}
+			// Send off result to channel
+			resChan <- pcResult{pc, wt}
 
 		}(i, j)
 	}
 
-	wg.Wait()
+	// Setup a goroutine to aggregate results send from pairCount workers
+	// via resChan channel
+	agWG.Add(1)
+	go func() {
+		for res := range resChan {
+			for pair, count := range res.PC {
+				if _, ok := pairCounts[pair]; !ok {
+					pairCounts[pair] = count
+				} else {
+					c := pairCounts[pair]
+					pairCounts[pair] = c + count
+				}
+			}
 
-	// Aggregate results
+			for pair, hashSet := range res.WT {
+				whereToUpdate[pair] = hashSet
+			}
+		}
+
+		// Signal main thread of completion
+		// doneChan <- true
+		agWG.Done()
+	}()
+
+	pcWG.Wait()
+	close(resChan)
+
+	// wait for aggregation done then close it
+	// <-doneChan
+	// close(doneChan)
+	agWG.Wait()
 
 	// TODO: test whether having a data race??? as goroutines update pairCounts and whereToUpdate
-
 	return pairCounts, whereToUpdate
 
 }
@@ -544,18 +586,25 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 
 	var progress = bt.setupProgress()
 
+	// NOTE: temporary add progress bar for counting trained words ONLY
+	// TODO: setup progress bar for the whole training process.
+	pb := progressbar.New(int(bt.VocabSize))
+
 	// 1. Add all special tokens to the vocabular
+	fmt.Printf("1. Adding special tokens...\n")
 	bt.addSpecialTokens(wordToId, idToWord)
 
 	// 2. Compute the initial alphabet (create maps of `chars`)
 	// These maps will be updated if `prefix`, `suffix` are added
 	// in the following steps
+	fmt.Printf("2. Creating maps of 'chars'...\n")
 	wordToId, idToWord = bt.computeAlphabet(wordCounts)
 	// fmt.Printf("Before id2Word: length %v - values:  %v\n", len(idToWord), idToWord)
 	// fmt.Printf("Before word2Id: length %v - %v\n", len(wordToId), wordToId)
 
 	// 3. Tokenize words (add prefix, suffix to the map if relevant)
 	// NOTE: `char` maps (wordToId, idToWord) will be updated if added prefix and/or suffix
+	fmt.Printf("3. Tokenizing words...\n")
 	bt.updateProgress(progress, uint(len(wordCounts)), "Tokenize word")
 
 	words, counts, wordToId, idToWord := bt.tokenizeWords(wordCounts, wordToId, idToWord, progress)
@@ -567,6 +616,7 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 	// The result will be a map of (pairs and their frequency) and
 	// a map of (pairs and their uint32 hashset - which is a map of key with no value)
 	// represent a position to update pair.
+	fmt.Printf("4. Pairing and counting co-occurence...\n")
 	bt.updateProgress(progress, uint(len(words)), "Count pairs")
 
 	var (
@@ -578,6 +628,7 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 	// pairCounts, whereToUpdate = bt.countPairsM(words, counts, progress)
 
 	// 5. Do merges
+	fmt.Printf("5. Merging pairs from top count down...\n")
 
 	// countComparator sort heap descendingly by `Count` field of TMerge struct
 	countComparator := func(a, b interface{}) int {
@@ -637,7 +688,8 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		// fmt.Println(len(wordToId))
 		// Stop as soon as we have a big enough vocabulary
 		if uint(len(wordToId)) >= bt.VocabSize {
-			fmt.Println("We have enough!")
+			pb.Finish()
+			fmt.Printf("\nVocab has enough words (%d)! Done.\n", bt.VocabSize)
 			break
 		}
 
@@ -660,7 +712,7 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		}
 
 		if top.Count < 1 || top.Count < bt.MinFrequency {
-			fmt.Println("We stop bcause top count is hit limit")
+			fmt.Printf("\nWe stop because top count is hit limit\n")
 			break
 		}
 
@@ -772,6 +824,8 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		}
 
 		// TODO: update progress bar by 1
+
+		pb.Add(1)
 
 	} // end of `for` loop
 

@@ -1,8 +1,9 @@
 package main
 
 import (
-	// "fmt"
+	"fmt"
 	"log"
+	"time"
 
 	"github.com/sugarme/sermo/tokenizer"
 	bpe "github.com/sugarme/sermo/tokenizer/model/bpe"
@@ -10,9 +11,11 @@ import (
 
 func main() {
 
+	startTime := time.Now()
+
 	files := []string{
-		"example/tokenizer/bpe/data-sample.txt",
-		"example/tokenizer/bpe/oscar.eo.txt",
+		// "example/tokenizer/bpe/input/data-sample.txt",
+		"example/tokenizer/bpe/input/oscar.eo.txt",
 	}
 
 	model, err := bpe.NewBPE()
@@ -46,6 +49,10 @@ func main() {
 	// merges := trainedModel.(*bpe.BPE).Merges
 	// fmt.Println(*merges)
 
-	trainedModel.Save("example/tokenizer/bpe", "es")
+	trainedModel.Save("example/tokenizer/bpe/output", "es")
+
+	trainedTime := time.Since(startTime).Seconds() / 60
+
+	fmt.Printf("Training time (min): %f.2\n", trainedTime)
 
 }

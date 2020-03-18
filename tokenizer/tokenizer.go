@@ -593,7 +593,7 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 			go func(n int, file string) {
 				// start reading file chunk by chunk
 				current = t.processChunk(current, limit, file, wChan, trainer)
-				fmt.Printf("%d thread has been completed\n", n)
+				fmt.Printf("File chunk %d has been completed\n", n)
 				scanWG.Done()
 			}(n, file)
 		}
@@ -606,7 +606,6 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 		for words := range wChan {
 			for w, c := range words {
 				count++
-				fmt.Printf("processed %v lines\n", count)
 				count, ok := dict[w]
 				// word exists, sum up frequency
 				if ok {
