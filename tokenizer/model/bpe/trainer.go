@@ -355,7 +355,7 @@ func (bt *BpeTrainer) tokenizeWords(wc map[string]uint32, w2id map[string]uint32
 
 	} // end loop of `wc`
 
-	fmt.Printf("Sorted original words: %v\n", sortedWords)
+	// fmt.Printf("Sorted original words: %v\n", sortedWords)
 	// fmt.Println(w2id)
 	// fmt.Println(id2w)
 	// fmt.Println(words)
@@ -379,13 +379,13 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(n)
+
 	for i, j := 0, size; i < n; i, j = j, j+size {
 		if j > n {
 			j = n
 		}
 
-		// wg.Add(1)
+		wg.Add(1)
 
 		go func(i, j int) {
 			for k := i; k < j; k++ {
@@ -574,8 +574,8 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet)
 	)
 
-	// pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
-	pairCounts, whereToUpdate = bt.countPairsM(words, counts, progress)
+	pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
+	// pairCounts, whereToUpdate = bt.countPairsM(words, counts, progress)
 
 	// 5. Do merges
 
@@ -599,9 +599,9 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 	// insert them to the queue
 	for pair, pos := range whereToUpdate {
 		if count, ok := pairCounts[pair]; ok {
-			char1 := idToWord[pair.C1]
-			char2 := idToWord[pair.C2]
-			fmt.Printf("pair chars: %v%v - pair: %v - count: %v - pos: %v\n", char1, char2, pair, count, pos)
+			// char1 := idToWord[pair.C1]
+			// char2 := idToWord[pair.C2]
+			// fmt.Printf("pair chars: %v%v - pair: %v - count: %v - pos: %v\n", char1, char2, pair, count, pos)
 			queue.Push(TMerge{
 				Pair:  pair,
 				Count: count,
@@ -620,7 +620,7 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 
 	var merges []TMerges
 
-	fmt.Printf("Word2ID before merge loop: %v\n", wordToId)
+	// fmt.Printf("Word2ID before merge loop: %v\n", wordToId)
 
 	// // Print out token and freq after tokenization
 	// for n := 0; n <= queue.Size(); n++ {
@@ -649,12 +649,12 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		t, _ := queue.Pop()
 		var top TMerge = t.(TMerge)
 
-		fmt.Printf("Top: count = %v | pair: %v\n", top.Count, top.Pair)
+		// fmt.Printf("Top: count = %v | pair: %v\n", top.Count, top.Pair)
 
 		if top.Count != pairCounts[top.Pair] {
 			pairCounts[top.Pair] = top.Count
 			queue.Push(top)
-			fmt.Println("Not found. Push new one...")
+			// fmt.Println("Not found. Push new one...")
 
 			continue
 		}
@@ -695,7 +695,7 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		}
 
 		newToken := fmt.Sprintf("%v%v", partA, partB)
-		fmt.Printf("new token: %v\n", newToken)
+		// fmt.Printf("new token: %v\n", newToken)
 
 		// Insert new token
 		newTokenId := uint32(len(idToWord))
@@ -756,8 +756,8 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 			}
 		}
 
-		fmt.Printf("length of whereToUpdate: %v\n", len(whereToUpdate))
-		fmt.Println(whereToUpdate)
+		// fmt.Printf("length of whereToUpdate: %v\n", len(whereToUpdate))
+		// fmt.Println(whereToUpdate)
 
 		for pair, pos := range whereToUpdate {
 			count := pairCounts[pair]

@@ -2,7 +2,7 @@ package bpe
 
 import (
 	"errors"
-	"fmt"
+	// "fmt"
 	"math/rand"
 	"reflect"
 
@@ -166,8 +166,8 @@ type WChange struct {
 // Merge finds any pairs of (c1, c2) and removes in place. It also maps changes depending
 // on the position of the pair in word.
 func (w *Word) Merge(c1, c2, replacement uint32) ([]WChange, error) {
-	fmt.Printf("before merge word symbols: %v\n", w.Symbols)
-	fmt.Printf("c1: %v - c2: %v- replacement: %v\n", c1, c2, replacement)
+	// fmt.Printf("before merge word symbols: %v\n", w.Symbols)
+	// fmt.Printf("c1: %v - c2: %v- replacement: %v\n", c1, c2, replacement)
 	var changes []WChange
 
 	i := 0
@@ -222,7 +222,7 @@ func (w *Word) Merge(c1, c2, replacement uint32) ([]WChange, error) {
 
 			// If there are other `chars` after the pair
 			if i > 0 && i < len(w.Symbols)-1 {
-				fmt.Println("Yes, there some char after the pair")
+				// fmt.Println("Yes, there some char after the pair")
 				changes = append(changes, WChange{
 					C1:     second.C,
 					C2:     w.Symbols[i+1].C,
@@ -240,7 +240,7 @@ func (w *Word) Merge(c1, c2, replacement uint32) ([]WChange, error) {
 
 	} // End of `for` loop
 
-	fmt.Printf("After merge word symbols: %v\n", w.Symbols)
+	// fmt.Printf("After merge word symbols: %v\n", w.Symbols)
 
 	// fmt.Printf("Num of changes: %v\n", len(changes))
 	// fmt.Printf("They are: %v\n", changes)

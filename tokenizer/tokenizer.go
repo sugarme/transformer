@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -19,6 +20,9 @@ import (
 	"github.com/sugarme/sermo/normalizer"
 	"github.com/sugarme/sermo/util"
 )
+
+const mb = 1024 * 1024
+const gb = 1024 * mb
 
 type Offsets struct {
 	Start uint
@@ -538,6 +542,167 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 	}
 
 	var jobs []Job
+	wChan := make(chan map[string]uint32)
+
+	// channel to signal the main thread that all the words have been
+	doneChan := make(chan (bool), 1)
+	dict := make(map[string]uint32)
+
+	scanWG := new(sync.WaitGroup)
+
+	for _, f := range files {
+		fsize, err := util.FileSize(f)
+		if err != nil {
+			log.Fatal(err)
+		}
+		bar := progressbar.New(int(fsize))
+
+		jobs = append(jobs, Job{f, bar})
+	}
+
+	// Step 1. scan text files by chunks in goroutines. In each goroutine,
+	// scan line by line, chop into tokens with (value, count) and
+	// queue them up in a channel for next step.
+	// We will set up a wait group to wait for all done.
+	// For each file do:
+	// 1. Create a goroutine to read file by chunks
+	// 2. Read line by line
+	// 3. Pre-tokenize line of text to tokens
+	// 4. Process tokens into its value and count
+	// 5. Send result to a channel for further processing.
+	for i := 0; i < len(jobs); i++ {
+		currentJob := i
+
+		file := jobs[currentJob].File
+		// current is the counter for bytes of the file.
+		var current int64 = 0
+		var limit int64 = 100 * mb
+
+		fi, err := os.Stat(file)
+		if err != nil {
+			return err
+		}
+		fsize := float64(fi.Size())
+
+		chunkNum := int(math.Ceil(fsize / float64(limit)))
+
+		// Setup some workers to process
+		for n := 1; n <= chunkNum; n++ {
+			scanWG.Add(1)
+
+			go func(n int, file string) {
+				// start reading file chunk by chunk
+				current = t.processChunk(current, limit, file, wChan, trainer)
+				fmt.Printf("%d thread has been completed\n", n)
+				scanWG.Done()
+			}(n, file)
+		}
+	}
+
+	// Read all incoming words from the channel and add to the dict
+	go func() {
+		var count = 0
+		fmt.Println("Start collecting words...")
+		for words := range wChan {
+			for w, c := range words {
+				count++
+				fmt.Printf("processed %v lines\n", count)
+				count, ok := dict[w]
+				// word exists, sum up frequency
+				if ok {
+					dict[w] = count + c
+				}
+				// word not exist, let add it
+				dict[w] = c
+			}
+		}
+
+		fmt.Printf("Dictionary length: %v words\n", len(dict))
+
+		// signal the main thread all done with this goroutine
+		doneChan <- true
+	}()
+
+	// wait for all goroutines to complete
+	scanWG.Wait()
+	close(wChan)
+
+	// wait for dictionary to process all words then close
+	<-doneChan
+	close(doneChan)
+
+	// Training model
+	fmt.Println("Start training...")
+	model, specialTokens := trainer.Train(dict)
+
+	// Replace with trained model
+	t.Model = &model
+	t.AddSpecialTokens(specialTokens)
+
+	return nil
+
+}
+
+// processChunk reads file chunk and processes it to word-count and sends off to channel
+// offset: start bound
+// limit: end bound
+// filename: file path includes file name
+// channel: channel to send proccessed words to.
+// current: cummulative point where the file processing stops.
+// trainer: Trainer to process tokens
+func (t *Tokenizer) processChunk(offset int64, limit int64, filename string, channel chan (map[string]uint32), trainer Trainer) (current int64) {
+	file, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	// move the pointer of the file to the start of designated chunk
+	file.Seek(offset, 0) // 0 means relative to the origin of file
+
+	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 1*gb) // initial buffer
+	scanner.Buffer(buf, 2*gb)    // max buffer size = 2GB
+
+	var cummulativeSize int64
+
+	for scanner.Scan() {
+		// Stop if read size has exceed the chunk size
+		cummulativeSize += int64(len(scanner.Bytes()))
+		if cummulativeSize > limit {
+			break
+		}
+
+		lwords := make(map[string]uint32)
+		var line string
+		line = scanner.Text()
+		// NOTE: io.scanner returns line w/o `\n`. We add it back manually.
+		line = fmt.Sprintf("%v\n", line)
+
+		normalized := t.normalize(line)
+		preTokenized := t.preTokenize(normalized.Normalized)
+		var tokens []string
+		for _, tok := range preTokenized {
+			tokens = append(tokens, tok.Value)
+		}
+		// process tokens
+		trainer.ProcessTokens(lwords, tokens)
+		// send to channel for further process
+		channel <- lwords
+
+	}
+
+	return cummulativeSize
+
+}
+
+func (t *Tokenizer) CTrain(trainer Trainer, files []string) error {
+	type Job struct {
+		File     string
+		Progress *progressbar.ProgressBar
+	}
+
+	var jobs []Job
 
 	for _, f := range files {
 		fsize, err := util.FileSize(f)
@@ -608,6 +773,13 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 		close(lnChan)
 	}()
 
+	err := g.Wait()
+
+	// as long as an error occurs, return it.
+	if err != nil {
+		return g.Wait()
+	}
+
 	// Handle result coming from channel
 	// words is a dictionary of words and their frequency
 	words := make(map[string]uint32)
@@ -632,8 +804,8 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 	t.Model = &model
 	t.AddSpecialTokens(specialTokens)
 
-	// as long as an error occurs, return it.
-	return g.Wait()
+	return nil
+
 }
 
 // PreTokenize processes logic, handling the case where there is no PreTokenizer set

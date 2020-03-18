@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	// "fmt"
 	"log"
 
 	"github.com/sugarme/sermo/tokenizer"
@@ -11,7 +11,8 @@ import (
 func main() {
 
 	files := []string{
-		"./data-sample.txt",
+		"example/tokenizer/bpe/data-sample.txt",
+		"example/tokenizer/bpe/oscar.eo.txt",
 	}
 
 	model, err := bpe.NewBPE()
@@ -19,9 +20,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	trainer := bpe.NewBpeTrainer(2, 50)
+	trainer := bpe.NewBpeTrainer(2, 52000)
 
 	tk := tokenizer.NewTokenizer(model)
+
+	tk.AddSpecialTokens([]string{
+		"<s>",
+		"<pad>",
+		"</s>",
+		"<unk>",
+		"<mask>",
+	})
 
 	err = tk.Train(trainer, files)
 	if err != nil {
@@ -31,9 +40,12 @@ func main() {
 	// Print out some data
 	// vocab := model.GetVocab()
 	trainedModel := tk.GetModel()
-	vocab := trainedModel.(*bpe.BPE).Vocab
-	merges := trainedModel.(*bpe.BPE).Merges
+	// vocab := trainedModel.(*bpe.BPE).Vocab
+	// fmt.Println(vocab)
 
-	fmt.Println(vocab)
-	fmt.Println(*merges)
+	// merges := trainedModel.(*bpe.BPE).Merges
+	// fmt.Println(*merges)
+
+	trainedModel.Save("example/tokenizer/bpe", "es")
+
 }

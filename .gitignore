@@ -5,3 +5,6 @@
 input/
 *.dat
 *.log
+
+*.txt
+*.json
