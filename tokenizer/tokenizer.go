@@ -679,6 +679,10 @@ func (t *Tokenizer) processChunk(offset int64, limit int64, filename string, cha
 		line = fmt.Sprintf("%v\n", line)
 
 		normalized := t.normalize(line)
+		// NOTE: if there are no preTokenizer, the default `preTokenize`
+		// will return the whole line without modification. Hence,
+		// token will be a line string. In that case, we may need to strip
+		// white spaces in the next step.
 		preTokenized := t.preTokenize(normalized.Normalized)
 		var tokens []string
 		for _, tok := range preTokenized {
@@ -809,6 +813,9 @@ func (t *Tokenizer) CTrain(trainer Trainer, files []string) error {
 
 // PreTokenize processes logic, handling the case where there is no PreTokenizer set
 func (t *Tokenizer) preTokenize(sentence string) []PreToken {
+	// If there is no `PreTokenizer` setup, just return a slice
+	// with one element of the whole string
+	// TODO: should we split sentence into words?
 	if t.PreTokenizer == nil {
 		return []PreToken{
 			{

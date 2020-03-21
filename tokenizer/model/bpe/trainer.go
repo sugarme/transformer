@@ -375,7 +375,6 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 
 	var pairCounts map[Pair]uint32 = make(map[Pair]uint32, bt.VocabSize*2)
 	var whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet, bt.VocabSize*2)
-	// var mutex = &sync.RWMutex{}
 
 	// Divide w into work units that take ~100μs-1ms to compute.
 	n := len(words)
@@ -470,17 +469,12 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 			}
 		}
 
-		// Signal main thread of completion
-		// doneChan <- true
 		agWG.Done()
 	}()
 
 	pcWG.Wait()
 	close(resChan)
 
-	// wait for aggregation done then close it
-	// <-doneChan
-	// close(doneChan)
 	agWG.Wait()
 
 	// TODO: test whether having a data race??? as goroutines update pairCounts and whereToUpdate
@@ -567,7 +561,7 @@ func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (tokenizer.Model, []st
 
 }
 
-// Process a bunch of toke, counting them
+// Process a bunch of tokens, counting them
 func (bt *BpeTrainer) ProcessTokens(words map[string]uint32, tokens []string) {
 	for _, token := range tokens {
 		c, _ := words[token]

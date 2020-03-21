@@ -15,7 +15,8 @@ func main() {
 
 	files := []string{
 		// "example/tokenizer/bpe/input/data-sample.txt",
-		"example/tokenizer/bpe/input/oscar.eo.txt",
+		// "example/tokenizer/bpe/input/oscar.eo.txt",
+		"example/tokenizer/bpe/input/trainer-sample.txt",
 	}
 
 	model, err := bpe.NewBPE()
