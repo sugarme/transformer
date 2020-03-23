@@ -1,16 +1,22 @@
 package pretokenizer
 
 import (
+	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/sugarme/sermo/normalizer"
 	"github.com/sugarme/sermo/tokenizer"
 	slice "github.com/sugarme/sermo/util/slice"
 )
 
-const constractRegStr = `'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+`
+// Regular epxression to split string to `word` token
+// including prefix whitespace. Contractions and punctuation
+// will be split as well.
+// Ref.https://regex101.com/r/pf5XJv
+const splitRegStr = `'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+`
 
-var constractRE = regexp.MustCompile(constractRegStr)
+var splitRE = regexp.MustCompile(splitRegStr)
 
 var BytesChar map[uint8]string = GenerateBytesChar()
 
@@ -106,11 +112,119 @@ type PreTokResult struct {
 	Offsets tokenizer.Offsets
 }
 
-// PreTokenize is in charge of transforming all the unicode
-// characters into their byte-level counterpart. It also splits
-// the input according to the configured regex.
-func (bl *ByteLevel) PreTokenize(normalized normalizer.NormalizedString) *PreTokResult {
-	// TODO: implement detail
+// PreTokenize transforms all the unicode characters into
+// their byte-level counterpart. It also splits the input
+// according to the configured regex.
+func (bl *ByteLevel) PreTokenize(normalized normalizer.Normalized) *PreTokResult {
+
+	var res []PreTokResult
+	var positions []tokenizer.Offsets
+	normalizedString := normalized.GetNormalized()
+
+	if bl.AddPrefixSpace && !strings.HasPrefix(normalizedString, " ") {
+		normalizedString = fmt.Sprintf(" %v", normalizedString)
+	}
+
+	// positions holds slice of matches' loc
+	// (which is 2 element slice loc[0] start - inclusive
+	// and loc[1] end - exclusive)
+	locs := splitRE.FindAllStringIndex(normalizedString, -1)
+	chars := strings.Split(normalizedString, "")
+
+	for _, loc := range locs {
+		start := loc[0]
+		end := loc[1]
+		// if last `char` is a whitespace, followed by a non-whitespace
+		// remove this whitespace
+		last := chars[loc[1]-1] // -1 because of end exclusive
+
+		var next string
+		// Exclude last `char` of string
+		if loc[1] < len(normalizedString) {
+			next = chars[0]
+		}
+
+		if last == " " && next != " " {
+			end -= 1
+		}
+
+		// If first `char` is not a whitespace but the previous one
+		// was, add that whitespace
+		first := chars[loc[0]]
+		var prev string
+		// Exclude the first `char` of string
+		if loc[0] > 0 {
+			prev = chars[start-1]
+		}
+		if first != " " && prev == " " {
+			start -= 1
+		}
+
+		positions = append(positions, tokenizer.Offsets{Start: uint(start), End: uint(end)})
+
+	}
+
+	// setup goroutine to split string concurrently based on `positions`
+	type Split struct {
+		Char    string
+		Changes uint8
+	}
+
+	// TODO: implement concurrently split
+	var splits [][]Split
+	for _, pos := range positions {
+		tok := normalizedString[pos.Start:(pos.End + 1)] // +1 to include `End` position
+		tokChars := strings.Split(tok, "")
+
+		var i = 0
+		var split []Split
+		var changeMap []normalizer.ChangeMap
+		for _, c := range tokChars {
+			size := len(c) // number of bytes for current `char`
+			bytes := []byte(normalizedString[i:(i + size)])
+			i += size
+
+			for _, b := range bytes {
+				var change uint8 = 0
+				if i > 0 {
+					change = 1
+				}
+
+				split = append(split, Split{Char: BytesChar[b], Changes: change})
+				changeMap = append(changeMap, normalizer.ChangeMap{RuneVal: BytesChar[b], Changes: int(change)})
+			}
+
+			// Update normalizedString
+			normalized.Transform(changeMap, 0)
+
+		}
+
+		splits = append(splits, split)
+	}
+
+	// Collect splits and their offsets
+	var totalLen = 0
+	for _, split := range splits {
+		var len = 0
+		var chars []string
+		for _, c := range split {
+			chars = append(chars, c.Char)
+			len += 1
+		}
+		totalLen += len
+		tok := strings.Join(chars, "")
+		offsets := tokenizer.Offsets{Start: uint(totalLen - len), End: uint(totalLen)}
+		res = append(res, PreTokResult{tok, offsets})
+	}
 
 	return &PreTokResult{}
+}
+
+// Implement PostProcessor for ByteLevel
+func (bl *ByteLevel) Process(encoding tokenizer.Encoding, addSpecialTokens bool, pairEncodingOpt ...tokenizer.Encoding) []tokenizer.Encoding {
+
+	// TODO: implement
+	var finalEncoding []tokenizer.Encoding
+
+	return finalEncoding
 }
