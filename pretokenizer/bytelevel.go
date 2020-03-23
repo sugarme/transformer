@@ -2,6 +2,7 @@ package pretokenizer
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 
@@ -220,11 +221,106 @@ func (bl *ByteLevel) PreTokenize(normalized normalizer.Normalized) *PreTokResult
 	return &PreTokResult{}
 }
 
+// Implement Decoder for `ByteLevel`
+
+// Decode converts any byte-level characters to their unicode couterpart
+// before merging everything back into a single string
+func (bl *ByteLevel) Decode(tokens []string) string {
+	s := strings.Join(tokens, "")
+	chars := strings.Split(s, "")
+
+	var bytes []byte
+
+	for _, c := range chars {
+		b := CharBytes[c]
+
+		bytes = append(bytes, b)
+	}
+
+	return string(bytes)
+}
+
 // Implement PostProcessor for ByteLevel
+func (bl *ByteLevel) AddedToken(isPair bool) uint {
+	return 0
+}
+
 func (bl *ByteLevel) Process(encoding tokenizer.Encoding, addSpecialTokens bool, pairEncodingOpt ...tokenizer.Encoding) []tokenizer.Encoding {
 
 	// TODO: implement
 	var finalEncoding []tokenizer.Encoding
 
+	enc := processOffsets(bl.TrimOffsets, encoding)
+
+	finalEncoding = append(finalEncoding, enc)
+	if pairEncodingOpt != nil {
+		pairEnc := processOffsets(bl.TrimOffsets, pairEncodingOpt[0])
+		finalEncoding = append(finalEncoding, pairEnc)
+	}
+
 	return finalEncoding
+}
+
+func processOffsets(isTrimOffsets bool, encoding tokenizer.Encoding) tokenizer.Encoding {
+
+	if !isTrimOffsets {
+		return encoding
+	}
+
+	type Modif struct {
+		LeadingSpaces uint
+		TrailingSpace uint
+	}
+
+	var modifs []Modif
+	var newOffsets []tokenizer.Offsets
+
+	toks := encoding.GetTokens()
+
+	for _, tok := range toks {
+
+		var leadingSpaces uint = 0
+		chars := strings.Split(tok, "")
+		for _, c := range chars {
+			if c != " " {
+				break
+			}
+			leadingSpaces += 1
+		}
+
+		var trailingSpaces uint = 0
+		for i := len(chars) - 1; i >= 0; i-- {
+			if chars[i] != " " {
+				break
+			}
+			trailingSpaces += 1
+		}
+
+		if leadingSpaces > 0 || trailingSpaces > 0 {
+			modifs = append(modifs, Modif{
+				LeadingSpaces: leadingSpaces,
+				TrailingSpace: trailingSpaces,
+			})
+		}
+	}
+
+	for i, m := range modifs {
+		offsets := encoding.GetOffsets()[i]
+
+		if m.LeadingSpaces > 0 {
+			minVal := math.Min(float64(offsets.Start+m.LeadingSpaces), float64(offsets.End))
+			offsets.Start = uint(minVal)
+		}
+
+		if m.TrailingSpace > 0 {
+			maxVal := math.Max(float64(offsets.End-m.TrailingSpace), float64(offsets.Start))
+			offsets.End = uint(maxVal)
+		}
+
+		newOffsets = append(newOffsets, offsets)
+	}
+
+	encoding.Offsets = newOffsets
+
+	return encoding
 }
