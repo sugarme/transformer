@@ -108,17 +108,17 @@ func (bl *ByteLevel) SetTrimOffsets(v bool) {
 
 // Implement `PreTokenizer` methods for `ByteLevel`
 
-type PreTokResult struct {
-	Content string
-	Offsets tokenizer.Offsets
-}
+// type PreTokResult struct {
+// Content string
+// Offsets tokenizer.Offsets
+// }
 
 // PreTokenize transforms all the unicode characters into
 // their byte-level counterpart. It also splits the input
 // according to the configured regex.
-func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer.Normalized, *[]PreTokResult) {
+func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer.Normalized, *[]tokenizer.PreToken) {
 
-	var res []PreTokResult
+	var res []tokenizer.PreToken
 	var positions []tokenizer.Offsets
 	normalizedString := normalized.GetNormalized()
 
@@ -181,12 +181,18 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 		// tok := normalizedString[pos.Start:(pos.End + 1)] // +1 to include `End` position
 		tok := normalizedString[pos.Start:pos.End] // +1 to include `End` position
 		tokChars := strings.Split(tok, "")
+		stringLen := len(normalizedString)
 
 		var changedTok []Change
 
 		for i := 0; i < len(tokChars); i++ {
 			size := len(tokChars[i]) // number of bytes for current `char`
-			bytes := []byte(normalizedString[n:(n + size)])
+			end := n + size
+			if end > stringLen {
+				end = stringLen
+			}
+			// bytes := []byte(normalizedString[n:(n + size)])
+			bytes := []byte(normalizedString[n:end])
 			n += size
 
 			for idx, b := range bytes {
@@ -224,7 +230,7 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 		totalLen += len
 		tok := strings.Join(chars, "")
 		offsets := tokenizer.Offsets{Start: uint(totalLen - len), End: uint(totalLen)}
-		res = append(res, PreTokResult{tok, offsets})
+		res = append(res, tokenizer.PreToken{tok, offsets})
 	}
 
 	return normalized, &res

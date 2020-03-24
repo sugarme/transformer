@@ -42,7 +42,8 @@ type Token struct {
 
 // PreTokenizer processes strings before going to the model
 type PreTokenizer interface {
-	PreTokenize(s string) []PreToken
+	// PreTokenize(s string) []PreToken
+	PreTokenize(*normalizer.Normalized) (*normalizer.Normalized, *[]PreToken)
 }
 
 // Model represents a model used during tokenization (i.e., BPE, Word, or Unigram)
@@ -300,14 +301,14 @@ func (t *Tokenizer) Encode(input EncodeInput) Encoding {
 			}
 
 			// 2. Pre-tokenization
-			var preTokenized []PreToken
+			var preTokenized *[]PreToken
 
 			if t.PreTokenizer != nil {
-				preTokenized = (*t.PreTokenizer).PreTokenize(normalized.Get().Normalized)
+				_, preTokenized = (*t.PreTokenizer).PreTokenize(normalized)
 			}
 
 			// 3. Model
-			output, _ := (*t.Model).Tokenize(preTokenized)
+			output, _ := (*t.Model).Tokenize(*preTokenized)
 
 			var en Encoding
 
@@ -824,7 +825,11 @@ func (t *Tokenizer) preTokenize(sentence string) []PreToken {
 			},
 		}
 	}
-	return (*t.PreTokenizer).PreTokenize(sentence)
+
+	normalized := normalizer.NewNormalizedFrom(sentence)
+
+	_, res := (*t.PreTokenizer).PreTokenize(normalized)
+	return *res
 }
 
 // normalize normalizes using given normalizer

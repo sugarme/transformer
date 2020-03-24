@@ -88,17 +88,17 @@ func TestAddPrefixSpace(t *testing.T) {
 		nwant := "ĠHelloĠmyĠfriend,ĠhowĠisĠyourĠdayĠgoing?"
 		ngot := normalized.GetNormalized()
 
-		pwant := []pretokenizer.PreTokResult{
-			{Content: "ĠHello", Offsets: tokenizer.Offsets{Start: 0, End: 6}},
-			{Content: "Ġmy", Offsets: tokenizer.Offsets{Start: 6, End: 9}},
-			{Content: "Ġfriend", Offsets: tokenizer.Offsets{Start: 9, End: 16}},
-			{Content: ",", Offsets: tokenizer.Offsets{Start: 16, End: 17}},
-			{Content: "Ġhow", Offsets: tokenizer.Offsets{Start: 17, End: 21}},
-			{Content: "Ġis", Offsets: tokenizer.Offsets{Start: 21, End: 24}},
-			{Content: "Ġyour", Offsets: tokenizer.Offsets{Start: 24, End: 29}},
-			{Content: "Ġday", Offsets: tokenizer.Offsets{Start: 29, End: 33}},
-			{Content: "Ġgoing", Offsets: tokenizer.Offsets{Start: 33, End: 39}},
-			{Content: "?", Offsets: tokenizer.Offsets{Start: 39, End: 40}},
+		pwant := []tokenizer.PreToken{
+			{Value: "ĠHello", Offsets: tokenizer.Offsets{Start: 0, End: 6}},
+			{Value: "Ġmy", Offsets: tokenizer.Offsets{Start: 6, End: 9}},
+			{Value: "Ġfriend", Offsets: tokenizer.Offsets{Start: 9, End: 16}},
+			{Value: ",", Offsets: tokenizer.Offsets{Start: 16, End: 17}},
+			{Value: "Ġhow", Offsets: tokenizer.Offsets{Start: 17, End: 21}},
+			{Value: "Ġis", Offsets: tokenizer.Offsets{Start: 21, End: 24}},
+			{Value: "Ġyour", Offsets: tokenizer.Offsets{Start: 24, End: 29}},
+			{Value: "Ġday", Offsets: tokenizer.Offsets{Start: 29, End: 33}},
+			{Value: "Ġgoing", Offsets: tokenizer.Offsets{Start: 33, End: 39}},
+			{Value: "?", Offsets: tokenizer.Offsets{Start: 39, End: 40}},
 		}
 
 		pgot := *res
@@ -134,7 +134,7 @@ func TestDecodeWorksOnSeparatedTokens(t *testing.T) {
 
 		var separatedTokens []string
 		for _, preTok := range *preTokenized {
-			chars := strings.Split(preTok.Content, "")
+			chars := strings.Split(preTok.Value, "")
 			separatedTokens = append(separatedTokens, chars...)
 		}
 
@@ -160,16 +160,16 @@ func TestHandlingOfNewLines(t *testing.T) {
 
 	var separatedTokens []string
 	for _, preTok := range *preTokenized {
-		chars := strings.Split(preTok.Content, "")
+		chars := strings.Split(preTok.Value, "")
 		separatedTokens = append(separatedTokens, chars...)
 	}
 
-	want := []pretokenizer.PreTokResult{
-		{Content: "Hello", Offsets: tokenizer.Offsets{Start: 0, End: 5}},
-		{Content: "Ġthere", Offsets: tokenizer.Offsets{Start: 5, End: 11}},
-		{Content: "Ċ", Offsets: tokenizer.Offsets{Start: 11, End: 12}},
-		{Content: "Hello", Offsets: tokenizer.Offsets{Start: 12, End: 17}},
-		{Content: "Ġthere", Offsets: tokenizer.Offsets{Start: 17, End: 23}},
+	want := []tokenizer.PreToken{
+		{Value: "Hello", Offsets: tokenizer.Offsets{Start: 0, End: 5}},
+		{Value: "Ġthere", Offsets: tokenizer.Offsets{Start: 5, End: 11}},
+		{Value: "Ċ", Offsets: tokenizer.Offsets{Start: 11, End: 12}},
+		{Value: "Hello", Offsets: tokenizer.Offsets{Start: 12, End: 17}},
+		{Value: "Ġthere", Offsets: tokenizer.Offsets{Start: 17, End: 23}},
 	}
 	got := *preTokenized
 
@@ -191,15 +191,15 @@ func TestHandlingOfMultipleSpaces(t *testing.T) {
 
 	var separatedTokens []string
 	for _, preTok := range *preTokenized {
-		chars := strings.Split(preTok.Content, "")
+		chars := strings.Split(preTok.Value, "")
 		separatedTokens = append(separatedTokens, chars...)
 	}
 
-	want := []pretokenizer.PreTokResult{
-		{Content: "Hello", Offsets: tokenizer.Offsets{Start: 0, End: 5}},
-		{Content: "Ġthere", Offsets: tokenizer.Offsets{Start: 5, End: 11}},
-		{Content: "ĠĠĠĠĠĠ", Offsets: tokenizer.Offsets{Start: 11, End: 17}},
-		{Content: "Ġdear", Offsets: tokenizer.Offsets{Start: 17, End: 22}},
+	want := []tokenizer.PreToken{
+		{Value: "Hello", Offsets: tokenizer.Offsets{Start: 0, End: 5}},
+		{Value: "Ġthere", Offsets: tokenizer.Offsets{Start: 5, End: 11}},
+		{Value: "ĠĠĠĠĠĠ", Offsets: tokenizer.Offsets{Start: 11, End: 17}},
+		{Value: "Ġdear", Offsets: tokenizer.Offsets{Start: 17, End: 22}},
 	}
 	got := *preTokenized
 
@@ -221,14 +221,14 @@ func TestOffsetsWhenCharSplitUp(t *testing.T) {
 
 	var separatedTokens []string
 	for _, preTok := range *preTokenized {
-		chars := strings.Split(preTok.Content, "")
+		chars := strings.Split(preTok.Value, "")
 		separatedTokens = append(separatedTokens, chars...)
 	}
 
-	want := []pretokenizer.PreTokResult{
-		{Content: "i", Offsets: tokenizer.Offsets{Start: 0, End: 1}},
-		{Content: "ŸŃ¢", Offsets: tokenizer.Offsets{Start: 1, End: 4}},
-		{Content: "j", Offsets: tokenizer.Offsets{Start: 4, End: 5}},
+	want := []tokenizer.PreToken{
+		{Value: "i", Offsets: tokenizer.Offsets{Start: 0, End: 1}},
+		{Value: "ŸŃ¢", Offsets: tokenizer.Offsets{Start: 1, End: 4}},
+		{Value: "j", Offsets: tokenizer.Offsets{Start: 4, End: 5}},
 	}
 	got := *preTokenized
 

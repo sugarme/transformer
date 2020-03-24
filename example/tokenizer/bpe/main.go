@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	// "github.com/sugarme/sermo/pretokenizer"
 	"github.com/sugarme/sermo/tokenizer"
 	bpe "github.com/sugarme/sermo/tokenizer/model/bpe"
 )
@@ -15,8 +16,8 @@ func main() {
 
 	files := []string{
 		// "example/tokenizer/bpe/input/data-sample.txt",
-		// "example/tokenizer/bpe/input/oscar.eo.txt",
-		"example/tokenizer/bpe/input/trainer-sample.txt",
+		"example/tokenizer/bpe/input/oscar.eo.txt",
+		// "example/tokenizer/bpe/input/trainer-sample.txt",
 	}
 
 	model, err := bpe.NewBPE()
@@ -35,6 +36,10 @@ func main() {
 		"<unk>",
 		"<mask>",
 	})
+
+	// bytelevel := pretokenizer.NewByteLevel()
+	//
+	// tk.WithPreTokenizer(bytelevel)
 
 	err = tk.Train(trainer, files)
 	if err != nil {
