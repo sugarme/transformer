@@ -116,7 +116,7 @@ type PreTokResult struct {
 // PreTokenize transforms all the unicode characters into
 // their byte-level counterpart. It also splits the input
 // according to the configured regex.
-func (bl *ByteLevel) PreTokenize(normalized normalizer.Normalized) *PreTokResult {
+func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer.Normalized, *[]PreTokResult) {
 
 	var res []PreTokResult
 	var positions []tokenizer.Offsets
@@ -124,25 +124,32 @@ func (bl *ByteLevel) PreTokenize(normalized normalizer.Normalized) *PreTokResult
 
 	if bl.AddPrefixSpace && !strings.HasPrefix(normalizedString, " ") {
 		normalizedString = fmt.Sprintf(" %v", normalizedString)
+		// update normalized with modified string
+		normalized = normalizer.NewNormalizedFrom(normalizedString)
 	}
 
 	// positions holds slice of matches' loc
 	// (which is 2 element slice loc[0] start - inclusive
 	// and loc[1] end - exclusive)
 	locs := splitRE.FindAllStringIndex(normalizedString, -1)
-	chars := strings.Split(normalizedString, "")
+	// TODO: convert index for runes to index tor `chars`
+	// chars := strings.Split(normalizedString, "")
+	chars := []rune(normalizedString)
+	fmt.Printf("chars: %v\n", chars)
+	fmt.Printf("locs: %v\n", locs)
 
 	for _, loc := range locs {
 		start := loc[0]
 		end := loc[1]
 		// if last `char` is a whitespace, followed by a non-whitespace
 		// remove this whitespace
-		last := chars[loc[1]-1] // -1 because of end exclusive
+		fmt.Println(loc[1] - 1)
+		last := string(chars[loc[1]-1]) // -1 because of end exclusive
 
 		var next string
 		// Exclude last `char` of string
 		if loc[1] < len(normalizedString) {
-			next = chars[0]
+			next = string(chars[0])
 		}
 
 		if last == " " && next != " " {
@@ -151,11 +158,11 @@ func (bl *ByteLevel) PreTokenize(normalized normalizer.Normalized) *PreTokResult
 
 		// If first `char` is not a whitespace but the previous one
 		// was, add that whitespace
-		first := chars[loc[0]]
+		first := string(chars[loc[0]])
 		var prev string
 		// Exclude the first `char` of string
 		if loc[0] > 0 {
-			prev = chars[start-1]
+			prev = string(chars[start-1])
 		}
 		if first != " " && prev == " " {
 			start -= 1
@@ -165,47 +172,54 @@ func (bl *ByteLevel) PreTokenize(normalized normalizer.Normalized) *PreTokResult
 
 	}
 
-	// setup goroutine to split string concurrently based on `positions`
-	type Split struct {
+	// setup goroutine to process string concurrently based on `positions`
+	type Change struct {
 		Char    string
 		Changes uint8
 	}
 
 	// TODO: implement concurrently split
-	var splits [][]Split
+	var changedToks [][]Change
+	var changeMap []normalizer.ChangeMap
+	var n = 0
 	for _, pos := range positions {
-		tok := normalizedString[pos.Start:(pos.End + 1)] // +1 to include `End` position
+		// tok := normalizedString[pos.Start:(pos.End + 1)] // +1 to include `End` position
+		tok := normalizedString[pos.Start:pos.End] // +1 to include `End` position
 		tokChars := strings.Split(tok, "")
 
-		var i = 0
-		var split []Split
-		var changeMap []normalizer.ChangeMap
-		for _, c := range tokChars {
-			size := len(c) // number of bytes for current `char`
-			bytes := []byte(normalizedString[i:(i + size)])
-			i += size
+		var changedTok []Change
 
-			for _, b := range bytes {
+		for i := 0; i < len(tokChars); i++ {
+			size := len(tokChars[i]) // number of bytes for current `char`
+			bytes := []byte(normalizedString[n:(n + size)])
+			n += size
+
+			for idx, b := range bytes {
 				var change uint8 = 0
-				if i > 0 {
+				if idx > 0 {
 					change = 1
 				}
 
-				split = append(split, Split{Char: BytesChar[b], Changes: change})
-				changeMap = append(changeMap, normalizer.ChangeMap{RuneVal: BytesChar[b], Changes: int(change)})
+				changedTok = append(changedTok, Change{Char: BytesChar[b], Changes: change})
+				var cm normalizer.ChangeMap = normalizer.ChangeMap{
+					RuneVal: BytesChar[b],
+					Changes: int(change),
+				}
+
+				changeMap = append(changeMap, cm)
 			}
 
-			// Update normalizedString
-			normalized.Transform(changeMap, 0)
+		} // end loop for one token ('split word')
 
-		}
-
-		splits = append(splits, split)
+		changedToks = append(changedToks, changedTok)
 	}
+
+	// Update normalizedString
+	normalized.Transform(changeMap, 0)
 
 	// Collect splits and their offsets
 	var totalLen = 0
-	for _, split := range splits {
+	for _, split := range changedToks {
 		var len = 0
 		var chars []string
 		for _, c := range split {
@@ -218,7 +232,7 @@ func (bl *ByteLevel) PreTokenize(normalized normalizer.Normalized) *PreTokResult
 		res = append(res, PreTokResult{tok, offsets})
 	}
 
-	return &PreTokResult{}
+	return normalized, &res
 }
 
 // Implement Decoder for `ByteLevel`
