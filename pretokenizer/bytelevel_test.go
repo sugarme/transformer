@@ -122,9 +122,8 @@ func TestDecodeWorksOnSeparatedTokens(t *testing.T) {
 	bytelevel.SetAddPrefixSpace(false)
 
 	lines := []string{
-		// "A Nuskhuri abbreviation of იესუ ქრისტე ( iesu kriste ) \" Jesus Christ \"",
-		// "An equal number have descenders , like p or q in English : გ , დ , ე , ვ , კ , ლ , ჟ , ტ , უ , ფ , ღ , ყ , ც",
-		"aგ w",
+		"A Nuskhuri abbreviation of იესუ ქრისტე ( iesu kriste ) \" Jesus Christ \"",
+		"An equal number have descenders , like p or q in English : გ , დ , ე , ვ , კ , ლ , ჟ , ტ , უ , ფ , ღ , ყ , ც",
 	}
 
 	for _, l := range lines {
@@ -146,5 +145,156 @@ func TestDecodeWorksOnSeparatedTokens(t *testing.T) {
 			t.Errorf("Want: %v\n", want)
 			t.Errorf("Got: %v\n", got)
 		}
+	}
+}
+
+func TestHandlingOfNewLines(t *testing.T) {
+
+	bytelevel := pretokenizer.NewByteLevel()
+	bytelevel.SetAddPrefixSpace(false)
+
+	var normalized *normalizer.Normalized
+	normalized = normalizer.NewNormalizedFrom("Hello there\nHello there")
+
+	_, preTokenized := bytelevel.PreTokenize(normalized)
+
+	var separatedTokens []string
+	for _, preTok := range *preTokenized {
+		chars := strings.Split(preTok.Content, "")
+		separatedTokens = append(separatedTokens, chars...)
+	}
+
+	want := []pretokenizer.PreTokResult{
+		{Content: "Hello", Offsets: tokenizer.Offsets{Start: 0, End: 5}},
+		{Content: "Ġthere", Offsets: tokenizer.Offsets{Start: 5, End: 11}},
+		{Content: "Ċ", Offsets: tokenizer.Offsets{Start: 11, End: 12}},
+		{Content: "Hello", Offsets: tokenizer.Offsets{Start: 12, End: 17}},
+		{Content: "Ġthere", Offsets: tokenizer.Offsets{Start: 17, End: 23}},
+	}
+	got := *preTokenized
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Want: %v\n", want)
+		t.Errorf("Got: %v\n", got)
+	}
+}
+
+func TestHandlingOfMultipleSpaces(t *testing.T) {
+
+	bytelevel := pretokenizer.NewByteLevel()
+	bytelevel.SetAddPrefixSpace(false)
+
+	var normalized *normalizer.Normalized
+	normalized = normalizer.NewNormalizedFrom("Hello there       dear")
+
+	_, preTokenized := bytelevel.PreTokenize(normalized)
+
+	var separatedTokens []string
+	for _, preTok := range *preTokenized {
+		chars := strings.Split(preTok.Content, "")
+		separatedTokens = append(separatedTokens, chars...)
+	}
+
+	want := []pretokenizer.PreTokResult{
+		{Content: "Hello", Offsets: tokenizer.Offsets{Start: 0, End: 5}},
+		{Content: "Ġthere", Offsets: tokenizer.Offsets{Start: 5, End: 11}},
+		{Content: "ĠĠĠĠĠĠ", Offsets: tokenizer.Offsets{Start: 11, End: 17}},
+		{Content: "Ġdear", Offsets: tokenizer.Offsets{Start: 17, End: 22}},
+	}
+	got := *preTokenized
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Want: %v\n", want)
+		t.Errorf("Got: %v\n", got)
+	}
+}
+
+func TestOffsetsWhenCharSplitUp(t *testing.T) {
+
+	bytelevel := pretokenizer.NewByteLevel()
+	bytelevel.SetAddPrefixSpace(false)
+
+	var normalized *normalizer.Normalized
+	normalized = normalizer.NewNormalizedFrom("i⭢j")
+
+	_, preTokenized := bytelevel.PreTokenize(normalized)
+
+	var separatedTokens []string
+	for _, preTok := range *preTokenized {
+		chars := strings.Split(preTok.Content, "")
+		separatedTokens = append(separatedTokens, chars...)
+	}
+
+	want := []pretokenizer.PreTokResult{
+		{Content: "i", Offsets: tokenizer.Offsets{Start: 0, End: 1}},
+		{Content: "ŸŃ¢", Offsets: tokenizer.Offsets{Start: 1, End: 4}},
+		{Content: "j", Offsets: tokenizer.Offsets{Start: 4, End: 5}},
+	}
+	got := *preTokenized
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Want: %v\n", want)
+		t.Errorf("Got: %v\n", got)
+	}
+}
+
+func TestProcessorTrimsOffsets(t *testing.T) {
+
+	normalized := normalizer.NewNormalizedFrom("")
+
+	start := tokenizer.NewEncoding(
+		*normalized,
+		[]uint32{}, []uint32{}, []string{
+			"ĠĠĠĠHelloĠĠ",
+			"ĠĠHello",
+			"HelloĠĠ",
+			"ĠĠĠĠ",
+		},
+		[]tokenizer.Offsets{
+			{Start: 0, End: 11},
+			{Start: 11, End: 18},
+			{Start: 18, End: 25},
+			{Start: 25, End: 29},
+		},
+		[]uint32{}, []uint32{},
+		[]tokenizer.Encoding{},
+	)
+
+	want := tokenizer.NewEncoding(
+		*normalized,
+		[]uint32{}, []uint32{}, []string{
+			"ĠĠĠĠHelloĠĠ",
+			"ĠĠHello",
+			"HelloĠĠ",
+			"ĠĠĠĠ",
+		},
+		[]tokenizer.Offsets{
+			{Start: 4, End: 9},
+			{Start: 13, End: 18},
+			{Start: 18, End: 23},
+			{Start: 29, End: 29},
+		},
+		[]uint32{}, []uint32{},
+		[]tokenizer.Encoding{},
+	)
+
+	bytelevel := pretokenizer.NewByteLevel()
+	bytelevel.SetTrimOffsets(true)
+
+	got := bytelevel.Process(start, false)
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("Want: %v\n", want)
+		t.Errorf("Got: %v\n", got)
+	}
+
+	pairWant := want
+	pairWant.MergeWith(want)
+
+	pairGot := bytelevel.Process(start, false, start)
+
+	if !reflect.DeepEqual(pairWant, pairGot) {
+		t.Errorf("Want: %v\n", pairWant)
+		t.Errorf("Got: %v\n", pairGot)
 	}
 }

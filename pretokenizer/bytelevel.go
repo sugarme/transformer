@@ -132,24 +132,19 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 	// (which is 2 element slice loc[0] start - inclusive
 	// and loc[1] end - exclusive)
 	locs := splitRE.FindAllStringIndex(normalizedString, -1)
-	// TODO: convert index for runes to index tor `chars`
-	// chars := strings.Split(normalizedString, "")
-	chars := []rune(normalizedString)
-	fmt.Printf("chars: %v\n", chars)
-	fmt.Printf("locs: %v\n", locs)
+	bytes := []byte(normalizedString)
 
 	for _, loc := range locs {
 		start := loc[0]
 		end := loc[1]
 		// if last `char` is a whitespace, followed by a non-whitespace
 		// remove this whitespace
-		fmt.Println(loc[1] - 1)
-		last := string(chars[loc[1]-1]) // -1 because of end exclusive
+		last := string(bytes[loc[1]-1]) // -1 because of end exclusive
 
 		var next string
 		// Exclude last `char` of string
 		if loc[1] < len(normalizedString) {
-			next = string(chars[0])
+			next = string(bytes[0])
 		}
 
 		if last == " " && next != " " {
@@ -158,11 +153,11 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 
 		// If first `char` is not a whitespace but the previous one
 		// was, add that whitespace
-		first := string(chars[loc[0]])
+		first := string(bytes[loc[0]])
 		var prev string
 		// Exclude the first `char` of string
 		if loc[0] > 0 {
-			prev = string(chars[start-1])
+			prev = string(bytes[start-1])
 		}
 		if first != " " && prev == " " {
 			start -= 1
@@ -259,17 +254,17 @@ func (bl *ByteLevel) AddedToken(isPair bool) uint {
 	return 0
 }
 
-func (bl *ByteLevel) Process(encoding tokenizer.Encoding, addSpecialTokens bool, pairEncodingOpt ...tokenizer.Encoding) []tokenizer.Encoding {
+func (bl *ByteLevel) Process(encoding tokenizer.Encoding, addSpecialTokens bool, pairEncodingOpt ...tokenizer.Encoding) tokenizer.Encoding {
 
 	// TODO: implement
-	var finalEncoding []tokenizer.Encoding
+	var finalEncoding tokenizer.Encoding
 
 	enc := processOffsets(bl.TrimOffsets, encoding)
 
-	finalEncoding = append(finalEncoding, enc)
+	finalEncoding = enc
 	if pairEncodingOpt != nil {
 		pairEnc := processOffsets(bl.TrimOffsets, pairEncodingOpt[0])
-		finalEncoding = append(finalEncoding, pairEnc)
+		finalEncoding.MergeWith(pairEnc)
 	}
 
 	return finalEncoding
@@ -296,7 +291,7 @@ func processOffsets(isTrimOffsets bool, encoding tokenizer.Encoding) tokenizer.E
 		var leadingSpaces uint = 0
 		chars := strings.Split(tok, "")
 		for _, c := range chars {
-			if c != " " {
+			if c != "Ġ" {
 				break
 			}
 			leadingSpaces += 1
@@ -304,7 +299,7 @@ func processOffsets(isTrimOffsets bool, encoding tokenizer.Encoding) tokenizer.E
 
 		var trailingSpaces uint = 0
 		for i := len(chars) - 1; i >= 0; i-- {
-			if chars[i] != " " {
+			if chars[i] != "Ġ" {
 				break
 			}
 			trailingSpaces += 1
@@ -332,6 +327,7 @@ func processOffsets(isTrimOffsets bool, encoding tokenizer.Encoding) tokenizer.E
 		}
 
 		newOffsets = append(newOffsets, offsets)
+
 	}
 
 	encoding.Offsets = newOffsets
