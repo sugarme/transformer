@@ -177,19 +177,23 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 	var changedToks [][]Change
 	var changeMap []normalizer.ChangeMap
 	var n = 0
+	stringLen := len([]byte(normalizedString))
 	for _, pos := range positions {
 		// tok := normalizedString[pos.Start:(pos.End + 1)] // +1 to include `End` position
 		tok := normalizedString[pos.Start:pos.End] // +1 to include `End` position
 		tokChars := strings.Split(tok, "")
-		stringLen := len(normalizedString)
 
 		var changedTok []Change
 
 		for i := 0; i < len(tokChars); i++ {
 			size := len(tokChars[i]) // number of bytes for current `char`
 			end := n + size
-			if end > stringLen {
-				end = stringLen
+			if end >= stringLen {
+				end = stringLen - 1
+			}
+
+			if n >= stringLen {
+				n = stringLen - 1
 			}
 			// bytes := []byte(normalizedString[n:(n + size)])
 			bytes := []byte(normalizedString[n:end])

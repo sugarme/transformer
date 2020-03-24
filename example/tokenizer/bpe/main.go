@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	// "github.com/sugarme/sermo/pretokenizer"
+	"github.com/sugarme/sermo/pretokenizer"
 	"github.com/sugarme/sermo/tokenizer"
 	bpe "github.com/sugarme/sermo/tokenizer/model/bpe"
 )
@@ -37,9 +37,9 @@ func main() {
 		"<mask>",
 	})
 
-	// bytelevel := pretokenizer.NewByteLevel()
-	//
-	// tk.WithPreTokenizer(bytelevel)
+	bytelevel := pretokenizer.NewByteLevel()
+
+	tk.WithPreTokenizer(bytelevel)
 
 	err = tk.Train(trainer, files)
 	if err != nil {
