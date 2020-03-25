@@ -133,18 +133,23 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 	// and loc[1] end - exclusive)
 	locs := splitRE.FindAllStringIndex(normalizedString, -1)
 	bytes := []byte(normalizedString)
+	// fmt.Printf("Total string length: %v\n", len(bytes))
 
 	for _, loc := range locs {
 		start := loc[0]
 		end := loc[1]
+
 		// if last `char` is a whitespace, followed by a non-whitespace
 		// remove this whitespace
 		last := string(bytes[loc[1]-1]) // -1 because of end exclusive
 
 		var next string
-		// Exclude last `char` of string
-		if loc[1] < len(normalizedString) {
-			next = string(bytes[0])
+		// Exclude last boundary
+		if loc[1] == len(bytes) {
+			end -= 1
+			next = ""
+		} else {
+			next = string(bytes[loc[1]])
 		}
 
 		if last == " " && next != " " {
@@ -158,6 +163,8 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 		// Exclude the first `char` of string
 		if loc[0] > 0 {
 			prev = string(bytes[start-1])
+		} else {
+			prev = ""
 		}
 		if first != " " && prev == " " {
 			start -= 1
@@ -177,29 +184,26 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 	var changedToks [][]Change
 	var changeMap []normalizer.ChangeMap
 	var n = 0
-	stringLen := len([]byte(normalizedString))
+	// stringLen := len([]byte(normalizedString))
 	for _, pos := range positions {
-		// tok := normalizedString[pos.Start:(pos.End + 1)] // +1 to include `End` position
-		tok := normalizedString[pos.Start:pos.End] // +1 to include `End` position
+		tok := normalizedString[pos.Start:(pos.End + 1)] // +1 to include `End` position
+		// tok := normalizedString[pos.Start:pos.End]
 		tokChars := strings.Split(tok, "")
 
 		var changedTok []Change
 
-		for i := 0; i < len(tokChars); i++ {
+		for i := 0; i < len(tokChars)-1; i++ {
 			size := len(tokChars[i]) // number of bytes for current `char`
 			end := n + size
-			if end >= stringLen {
-				end = stringLen - 1
-			}
 
-			if n >= stringLen {
-				n = stringLen - 1
+			// Exclude last boudary
+			if end == len(bytes) {
+				end -= 1
 			}
-			// bytes := []byte(normalizedString[n:(n + size)])
-			bytes := []byte(normalizedString[n:end])
+			tokBytes := []byte(normalizedString[n:end])
 			n += size
 
-			for idx, b := range bytes {
+			for idx, b := range tokBytes {
 				var change uint8 = 0
 				if idx > 0 {
 					change = 1

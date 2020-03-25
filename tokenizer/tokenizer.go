@@ -602,22 +602,19 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 
 	// Read all incoming words from the channel and add to the dict
 	go func() {
-		var count = 0
 		fmt.Println("Start collecting words...")
 		for words := range wChan {
 			for w, c := range words {
-				count++
 				count, ok := dict[w]
 				// word exists, sum up frequency
 				if ok {
 					dict[w] = count + c
+				} else {
+					// word not exist, let add it
+					dict[w] = c
 				}
-				// word not exist, let add it
-				dict[w] = c
 			}
 		}
-
-		fmt.Printf("Dictionary length: %v words\n", len(dict))
 
 		// signal the main thread all done with this goroutine
 		doneChan <- true
@@ -627,9 +624,19 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 	scanWG.Wait()
 	close(wChan)
 
-	// wait for dictionary to process all words then close
+	// Wait for dictionary to process all words then close
 	<-doneChan
 	close(doneChan)
+
+	fmt.Printf("Dictionary length: %v words\n", len(dict))
+	// // Print out some samples
+	// var count = 0
+	// for k, _ := range dict {
+	// if count <= 5 {
+	// fmt.Println(k)
+	// count++
+	// }
+	// }
 
 	// Training model
 	fmt.Println("Start training...")
@@ -640,7 +647,6 @@ func (t *Tokenizer) Train(trainer Trainer, files []string) error {
 	t.AddSpecialTokens(specialTokens)
 
 	return nil
-
 }
 
 // processChunk reads file chunk and processes it to word-count and sends off to channel
@@ -673,11 +679,12 @@ func (t *Tokenizer) processChunk(offset int64, limit int64, filename string, cha
 			break
 		}
 
+		// line words
 		lwords := make(map[string]uint32)
 		var line string
 		line = scanner.Text()
 		// NOTE: io.scanner returns line w/o `\n`. We add it back manually.
-		line = fmt.Sprintf("%v\n", line)
+		// line = fmt.Sprintf("%v\n", line)
 
 		normalized := t.normalize(line)
 		// NOTE: if there are no preTokenizer, the default `preTokenize`
@@ -790,6 +797,7 @@ func (t *Tokenizer) CTrain(trainer Trainer, files []string) error {
 
 	// calculate frequency and create a final map
 	for result := range lnChan {
+		fmt.Printf("Result: %v\n", result)
 		for w, c := range result {
 			count, ok := words[w]
 			// word exists, sum up frequency

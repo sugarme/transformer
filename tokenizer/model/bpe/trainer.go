@@ -254,6 +254,7 @@ func (bt *BpeTrainer) computeAlphabet(wc map[string]uint32) (wordToId map[string
 
 	// remove the unwanted `chars`
 	if toRemove > 0 {
+		fmt.Println("We are going to remove some chars...")
 		// 1. Sort `kept` by char alphabetically?
 		// TODO: double-check this (sort by char or freq? asc or desc)
 		sort.Slice(kept, func(i, j int) bool {
@@ -555,6 +556,8 @@ func (bt *BpeTrainer) WithProgressBar() bool {
 // func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (BPE, []string) {
 func (bt *BpeTrainer) Train(wordCounts map[string]uint32) (tokenizer.Model, []string) {
 
+	// fmt.Printf("Word Counts: %v\n", wordCounts)
+
 	model, merges := bt.train(wordCounts)
 
 	return model.(tokenizer.Model), merges
@@ -602,6 +605,8 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 	bt.updateProgress(progress, uint(len(wordCounts)), "Tokenize word")
 
 	words, counts, wordToId, idToWord := bt.tokenizeWords(wordCounts, wordToId, idToWord, progress)
+
+	fmt.Printf("Words: %v\n", idToWord)
 
 	bt.finalizeProgress(progress, uint(len(words)))
 
@@ -726,6 +731,7 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		}
 
 		if skip {
+			// fmt.Println("Skipped because `pair` is no longer mapped in its origin word!")
 			continue
 		}
 
@@ -809,7 +815,7 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 			count := pairCounts[pair]
 			// char1 := idToWord[pair.C1]
 			// char2 := idToWord[pair.C2]
-			// fmt.Printf("pair chars: %v%v - pair: %v - count: %v - pos: %v\n", char1, char2, pair, count, pos)
+			// fmt.Printf("pair chars: '%v%v' - pair: %v - count: %v - pos: %v\n", char1, char2, pair, count, pos)
 			if count > 0 {
 				queue.Push(TMerge{
 					pair, count, pos, time.Now(),
