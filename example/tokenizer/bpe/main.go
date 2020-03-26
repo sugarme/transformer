@@ -15,13 +15,21 @@ func main() {
 	startTime := time.Now()
 
 	files := []string{
-		// "example/tokenizer/bpe/input/data-sample.txt",
-		"example/tokenizer/bpe/input/oscar.eo.txt",
-		// "example/tokenizer/bpe/input/oscar.eo-1k.txt",
-		// "example/tokenizer/bpe/input/trainer-sample.txt",
+		// "example/tokenizer/bpe/input/oscar.eo-50k.txt",
 		// "example/tokenizer/bpe/input/adieu.txt",
 		// "example/tokenizer/bpe/input/test.txt",
 		// "example/tokenizer/bpe/input/test-eo.txt",
+
+		"example/tokenizer/bpe/input/oscar.eo.txt",
+		// "example/tokenizer/bpe/input/epo_literature_2011_300K-sentences.txt",
+		// "example/tokenizer/bpe/input/epo_mixed_2012_1M-sentences.txt",
+		// "example/tokenizer/bpe/input/epo_newscrawl_2017_1M-sentences.txt",
+		// "example/tokenizer/bpe/input/epo_web_2011_100K-sentences.txt",
+		// "example/tokenizer/bpe/input/epo_web_2012_1M-sentences.txt",
+		// "example/tokenizer/bpe/input/epo_wikipedia_2007_300K-sentences.txt",
+		// "example/tokenizer/bpe/input/epo_wikipedia_2011_300K-sentences.txt",
+		// "example/tokenizer/bpe/input/epo_wikipedia_2012_300K-sentences.txt",
+		// "example/tokenizer/bpe/input/epo_wikipedia_2016_300K-sentences.txt",
 	}
 
 	model, err := bpe.NewBPE()

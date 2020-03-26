@@ -105,7 +105,7 @@ func (bb *BpeBuilder) Build() (*BPE, error) {
 		err    error
 		vocab  Vocab
 		merges Merges
-		vocabR VocabR
+		vocabR VocabR = make(map[uint32]string)
 		cache  *Cache
 		bpe    BPE
 	)
@@ -132,10 +132,12 @@ func (bb *BpeBuilder) Build() (*BPE, error) {
 		bb.Config.Vocab = vocab
 		bb.Config.Merges = merges
 
-		for k, v := range *vocab {
-			vocabR[v] = k
-		}
 	}
+
+	for k, v := range vocab {
+		vocabR[v] = k
+	}
+
 	if bb.Config.CacheCapacity != 0 {
 		cache = NewCache(bb.Config.CacheCapacity)
 	} else {
@@ -575,7 +577,10 @@ func (b *BPE) Save(dir string, nameOpt ...string) error {
 
 	// Create lines of merges
 	for _, p := range pairRanks {
-		line := fmt.Sprintf("%v %v\n", p.Pair.C1, p.Pair.C2)
+		// line := fmt.Sprintf("%v %v\n", p.Pair.C1, p.Pair.C2)
+		c1 := b.IdToToken(p.Pair.C1)
+		c2 := b.IdToToken(p.Pair.C2)
+		line := fmt.Sprintf("%v %v\n", c1, c2)
 		lines = append(lines, line)
 	}
 
