@@ -623,8 +623,8 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet)
 	)
 
-	pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
-	// pairCounts, whereToUpdate = bt.countPairsM(words, counts, progress)
+	// pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
+	pairCounts, whereToUpdate = bt.countPairsM(words, counts, progress)
 
 	// 5. Do merges
 	fmt.Printf("5. Merging pairs from top count down...\n")
@@ -657,6 +657,8 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 				Count: count,
 				Pos:   pos,
 			})
+		} else {
+			fmt.Println("Something wrong here...")
 		}
 	}
 
