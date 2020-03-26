@@ -17,7 +17,7 @@ func main() {
 	files := []string{
 		// "example/tokenizer/bpe/input/data-sample.txt",
 		"example/tokenizer/bpe/input/oscar.eo.txt",
-		// "example/tokenizer/bpe/input/oscar.eo-100k.txt",
+		// "example/tokenizer/bpe/input/oscar.eo-1k.txt",
 		// "example/tokenizer/bpe/input/trainer-sample.txt",
 		// "example/tokenizer/bpe/input/adieu.txt",
 		// "example/tokenizer/bpe/input/test.txt",
@@ -29,8 +29,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// trainer := bpe.NewBpeTrainer(2, 52000)
-	trainer := bpe.NewBpeTrainer(2, 100000)
+	trainer := bpe.NewBpeTrainer(2, 52000)
 
 	tk := tokenizer.NewTokenizer(model)
 

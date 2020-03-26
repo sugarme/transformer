@@ -379,16 +379,28 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 
 	// Divide w into work units that take ~100μs-1ms to compute.
 	n := len(words)
-	size := int(1000000 / n)
+	// size := int(1000000 / n)
+	// if size < 8 {
+	// size = 8
+	// }
+
+	// batch size
+	var workerNum int
+	if n < 10000 {
+		workerNum = 1
+	} else {
+		workerNum = 4
+	}
+
+	size := int(n / workerNum)
 	if size < 1 {
 		size = 1
 	}
 
 	resChan := make(chan pcResult)
-	// doneChan := make(chan (bool), 1)
+	doneChan := make(chan (bool), 1)
 
 	var pcWG = new(sync.WaitGroup)
-	var agWG = new(sync.WaitGroup)
 
 	// pcWG.Add(n)
 	for i, j := 0, size; i < n; i, j = j, j+size {
@@ -398,14 +410,20 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 
 		pcWG.Add(1)
 
-		go func(i, j int) {
+		// fmt.Printf("i: %v - j: %v\n", i, j)
+
+		go func(i, j int, words []Word, counts []uint32) {
 			defer pcWG.Done()
-			var pc map[Pair]uint32 = make(map[Pair]uint32, bt.VocabSize*2)
-			var wt map[Pair]UintSet = make(map[Pair]UintSet, bt.VocabSize*2)
+			var pc map[Pair]uint32 = make(map[Pair]uint32)
+			var wt map[Pair]UintSet = make(map[Pair]UintSet)
 
 			for k := i; k < j; k++ {
 				// Do individual task here with index k
+				// which is a single word at index k in slice `words`
 				word := words[k]
+				count := counts[k]
+
+				// fmt.Printf("Word: %v\n", word)
 				var window = 2
 				for x := 0; i < len(word.Symbols)-1; x += window - 1 {
 					y := x + window
@@ -423,12 +441,16 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 
 					// Initialize pairCounts and whereToUpdate for this pair
 					// if we just seen it
-					if _, ok := pc[pair]; !ok {
+					var curCount uint32 = count
+					if c, ok := pc[pair]; !ok {
 						pc[pair] = 0
+					} else {
+						curCount += c
 					}
 
 					// Then update counts
-					count := counts[k]
+					pc[pair] = curCount
+
 					// hashset map[uint]struct{}
 					var hs UintSet = make(map[uint]struct{})
 					if h, ok := wt[pair]; ok {
@@ -439,21 +461,20 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 						wt[pair] = hs
 					}
 
-					pc[pair] += count
 				}
 
 				// TODO: update progress bar
 
 			}
 			// Send off result to channel
+
 			resChan <- pcResult{pc, wt}
 
-		}(i, j)
+		}(i, j, words, counts)
 	}
 
 	// Setup a goroutine to aggregate results send from pairCount workers
 	// via resChan channel
-	agWG.Add(1)
 	go func() {
 		for res := range resChan {
 			for pair, count := range res.PC {
@@ -470,20 +491,20 @@ func (bt *BpeTrainer) countPairs(words []Word, counts []uint32, progress interfa
 			}
 		}
 
-		agWG.Done()
+		doneChan <- true
 	}()
 
 	pcWG.Wait()
 	close(resChan)
 
-	agWG.Wait()
+	<-doneChan
 
 	// TODO: test whether having a data race??? as goroutines update pairCounts and whereToUpdate
 	return pairCounts, whereToUpdate
 
 }
 
-// coutPairsM counts frequency of pairs not using concurrency/paralellism
+// countPairsM counts frequency of pairs not using concurrency/paralellism
 func (bt *BpeTrainer) countPairsM(words []Word, counts []uint32, progress interface{}) (map[Pair]uint32, map[Pair]UintSet) {
 
 	var pairCounts map[Pair]uint32 = make(map[Pair]uint32, bt.VocabSize*2)
@@ -623,8 +644,8 @@ func (bt *BpeTrainer) train(wordCounts map[string]uint32) (interface{}, []string
 		whereToUpdate map[Pair]UintSet = make(map[Pair]UintSet)
 	)
 
-	// pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
-	pairCounts, whereToUpdate = bt.countPairsM(words, counts, progress)
+	pairCounts, whereToUpdate = bt.countPairs(words, counts, progress)
+	// pairCounts, whereToUpdate = bt.countPairsM(words, counts, progress)
 
 	// 5. Do merges
 	fmt.Printf("5. Merging pairs from top count down...\n")
