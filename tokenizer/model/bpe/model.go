@@ -395,8 +395,6 @@ func (b *BPE) MergeWord(w string) *Word {
 				unkId := (*b.Vocab)[*b.UnkToken]
 				// add `unk`
 				word.Add(unkId)
-			} else {
-
 			}
 		}
 	}
@@ -416,14 +414,22 @@ func (b *BPE) WordToTokens(word Word, initialOffsets tokenizer.Offsets) ([]token
 	var tokens []tokenizer.Token
 	chars := word.GetChars()
 	offsets := word.GetOffsets()
-	var zWord []struct {
+	type zword struct {
 		Id      uint32
 		Offsets tokenizer.Offsets
 	}
+	var zWord []zword
 
-	err := util.Zip(chars, offsets, &zWord)
-	if err != nil {
-		return nil, err
+	// err := util.Zip(chars, offsets, &zWord)
+	// if err != nil {
+	// return nil, err
+	// }
+
+	for i, char := range chars {
+		zWord = append(zWord, zword{
+			Id:      char,
+			Offsets: offsets[i],
+		})
 	}
 
 	for _, z := range zWord {
@@ -481,6 +487,9 @@ func (b *BPE) Tokenize(sentence []tokenizer.PreToken) ([]tokenizer.Token, error)
 		if cachedWords == nil {
 			word := b.MergeWord(preTok.Value)
 			tokens, err = b.WordToTokens(*word, preTok.Offsets)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			if i > len(cachedWords) {
 				// no cache hit, let's recompute merges

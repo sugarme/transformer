@@ -15,11 +15,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(model.GetVocabSize())
-
 	tk := tokenizer.NewTokenizer(model)
-
-	fmt.Printf("Vocab size: %v\n", tk.GetVocabSize(false))
 
 	bl := pretokenizer.NewByteLevel()
 
@@ -27,10 +23,8 @@ func main() {
 
 	en := tk.Encode("Mi estas Julien.")
 
-	fmt.Printf("Encoding: %v\n", en)
-
 	for _, tok := range en.GetTokens() {
-		fmt.Println(tok)
+		fmt.Printf("'%v'\n", tok)
 	}
 
 }

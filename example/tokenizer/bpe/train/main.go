@@ -58,23 +58,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Print out some data
-	// vocab := model.GetVocab()
 	trainedModel := tk.GetModel()
-	// vocab := trainedModel.(*bpe.BPE).Vocab
-	// fmt.Println(vocab)
-
-	// merges := trainedModel.(*bpe.BPE).Merges
-	// fmt.Println(*merges)
 
 	trainedModel.Save("example/tokenizer/bpe/train/model", "es")
 
 	trainedTime := time.Since(startTime).Seconds() / 60
 
 	fmt.Printf("Training time (min): %f.2\n", trainedTime)
-
-	input := tokenizer.Single{Sentence: "Mi estas Julien"}
-
-	fmt.Println(tk.Encode(input))
 
 }

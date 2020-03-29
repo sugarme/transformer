@@ -301,8 +301,6 @@ func (t *Tokenizer) Encode(input EncodeInput) Encoding {
 		pairEncoding = t.generateOutput(pair, 1)
 	}
 
-	fmt.Printf("Encoding Before PostProcess: %v\n", encoding)
-
 	// 4. Post processing
 	if t.PostProcessor != nil {
 		return (*t.PostProcessor).Process(encoding, pairEncoding)
@@ -320,11 +318,7 @@ func (t *Tokenizer) generateOutput(sentence string, typeId uint32) Encoding {
 	var splits []splitRes
 	var encodings []Encoding
 
-	fmt.Printf("sentence: %v\n", sentence)
-
 	splits = t.splitOnAddedTokens(sentence)
-
-	fmt.Printf("Splits: %v\n", splits)
 
 	for _, s := range splits {
 		// If this is one of our added tokens, return an encoding directly
@@ -345,8 +339,6 @@ func (t *Tokenizer) generateOutput(sentence string, typeId uint32) Encoding {
 				}
 				normalized = &norm
 			}
-
-			fmt.Printf("Normalized: %v\n", normalized)
 
 			// 2. Pre-tokenization
 			var preTokenized *[]PreToken
@@ -369,15 +361,11 @@ func (t *Tokenizer) generateOutput(sentence string, typeId uint32) Encoding {
 				preTokenized = &preToks
 			}
 
-			fmt.Printf("Pretokenized: %v\n", preTokenized)
-
 			// 3. Model
 			output, err := (*t.Model).Tokenize(*preTokenized)
 			if err != nil {
 				log.Fatal(err)
 			}
-
-			fmt.Printf("Output: %v\n", output)
 
 			var en Encoding
 
@@ -500,8 +488,6 @@ func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
 	var splits []splitRes
 	rs := []rune(sentence)
 	var allSplits [][]int
-
-	fmt.Printf("Sentence:%v\n", sentence)
 
 	// if there's no splitRe (regular epxression to split), do nothing
 	if t.SplitRe == nil {

@@ -2,8 +2,7 @@ package bpe
 
 import (
 	"errors"
-	"fmt"
-	// "math/rand"
+	"math/rand"
 	"reflect"
 	"time"
 
@@ -127,15 +126,15 @@ func (w *Word) Add(c uint32) {
 			last = Symbol{}
 		} else {
 			last = w.Symbols[len-1]
-		}
-		if reflect.ValueOf(last.Next).IsValid() {
-			prev = -1
-			next = -1
-		} else {
-			// update `next` on previous one
-			w.Symbols[len].Next = len
-			prev = len - 1
-			next = -1
+			if !reflect.ValueOf(last.Next).IsValid() {
+				prev = -1
+				next = -1
+			} else {
+				// update `next` on previous one
+				w.Symbols[len-1].Next = len
+				prev = len - 1
+				next = -1
+			}
 		}
 	}
 
@@ -281,10 +280,10 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 		if j >= len(w.Symbols) {
 			j = len(w.Symbols)
 		}
-		w := w.Symbols[i:j]
+		slice := w.Symbols[i:j]
 		pair := Pair{
-			C1: w[0].C,
-			C2: w[1].C,
+			C1: slice[0].C,
+			C2: slice[1].C,
 		}
 		m, _ := merges[pair] // m is PairVal type with pair's rank and newId values
 
@@ -297,24 +296,18 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 		queue.Push(merge)
 	}
 
-	fmt.Printf("Queue size: %v\n", queue.Size())
-
-	var skip = make([]Merge, queue.Size())
-	// r := rand.New(rand.NewSource(99)) // use fixed seed to produce same output on every run.
+	var skip []Merge
+	r := rand.New(rand.NewSource(99)) // use fixed seed to produce same output on every run.
 
 	// Pop the queue until empty
 	for {
 		top, ok := queue.Pop()
-		// it's empty
-		if !ok {
+		if !ok { // it's empty
 			break
 		}
 
-		// fmt.Printf("Dropout Value: %v\n", dropout)
-		// fmt.Printf("Random Value: %v\n", r.Float32())
-
-		// if dropout >= 0.0 && r.Float32() < dropout {
-		if dropout > 0.0 {
+		if dropout >= 0.0 && r.Float32() < dropout {
+			// if dropout > 0.0 {
 			skip = append(skip, top.(Merge))
 		} else {
 			// Re-insert the skipped elements
@@ -338,14 +331,14 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 				}
 
 				m, ok := merges[targetNewPair]
-				if !ok || m.NewId == top.(Merge).NewId {
+				if !ok || m.NewId != top.(Merge).NewId {
 					continue
 				}
 
 				// Otherwise, let's merge
 				w.Symbols[top.(Merge).Pos].MergeWith(&right, top.(Merge).NewId)
 				// Tag the right part as removed
-				w.Symbols[top.(Merge).Pos].Len = 0
+				w.Symbols[nextPos].Len = 0
 
 				// Update `prev` on the new `next` to the current pos
 				if right.Next > -1 && right.Next < len(w.Symbols) {
@@ -374,7 +367,7 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 
 				// Insert the new pair formed with the next symbol
 				next := current.Next
-				if int(next) < len(w.Symbols) {
+				if int(next) < len(w.Symbols) && next > -1 {
 					nextSymbol := w.Symbols[next]
 					newPair := Pair{
 						C1: current.C,
@@ -393,8 +386,8 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 	} // End of `for` loop
 
 	// Filter out the removed symbols
-	for i, _ := range w.Symbols {
-		if w.Symbols[i].Len == 0 {
+	for i, s := range w.Symbols {
+		if s.Len == 0 {
 			w.Symbols.Remove(i)
 		}
 	}
