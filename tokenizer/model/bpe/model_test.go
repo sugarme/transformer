@@ -62,7 +62,7 @@ func TestBPE_FromFiles(t *testing.T) {
 	_, err = bpe.NewBpeFromFiles(vf.Name(), mf.Name())
 
 	got := util.TraceError(err)
-	want := "Read merge file error:"
+	want := "Read merge file error: invalid data at line 1 \n"
 
 	if util.ErrorContains(got, want) {
 		t.Errorf("Want: %v\n", want)

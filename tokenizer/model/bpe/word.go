@@ -2,11 +2,13 @@ package bpe
 
 import (
 	"errors"
-	// "fmt"
-	"math/rand"
+	"fmt"
+	// "math/rand"
 	"reflect"
+	"time"
 
 	"github.com/emirpasic/gods/trees/binaryheap"
+	"github.com/emirpasic/gods/utils"
 
 	"github.com/sugarme/sermo/tokenizer"
 )
@@ -17,6 +19,7 @@ type Merge struct {
 	Pos   uint
 	Rank  uint32
 	NewId uint32
+	Time  time.Time
 }
 
 // Ordering is a enum of Less, Equal, and Greater
@@ -254,10 +257,25 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 		dropout = dropoutOpt[0]
 	}
 
-	var queue = binaryheap.NewWithIntComparator()
+	countComparator := func(a, b interface{}) int {
+		c1 := a.(Merge).Rank
+		c2 := b.(Merge).Rank
+
+		if c1 == c2 {
+			aTime := a.(Merge).Time
+			bTime := b.(Merge).Time
+
+			return utils.TimeComparator(bTime, aTime)
+		}
+
+		return utils.UInt32Comparator(c2, c1)
+	}
+
+	var queue = binaryheap.NewWith(countComparator)
 
 	// Load items to the heap
 	var window = 2
+
 	for i := 0; i < len(w.Symbols)-1; i += window - 1 {
 		j := i + window
 		if j >= len(w.Symbols) {
@@ -269,15 +287,20 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 			C2: w[1].C,
 		}
 		m, _ := merges[pair] // m is PairVal type with pair's rank and newId values
-		queue.Push(Merge{
+
+		var merge Merge = Merge{
 			Pos:   uint(i),
 			Rank:  m.Rank,
 			NewId: m.NewId,
-		})
+		}
+
+		queue.Push(merge)
 	}
 
+	fmt.Printf("Queue size: %v\n", queue.Size())
+
 	var skip = make([]Merge, queue.Size())
-	r := rand.New(rand.NewSource(99)) // use fixed seed to produce same output on every run.
+	// r := rand.New(rand.NewSource(99)) // use fixed seed to produce same output on every run.
 
 	// Pop the queue until empty
 	for {
@@ -287,7 +310,11 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 			break
 		}
 
-		if dropout > 0.0 && r.Float32() < dropout {
+		// fmt.Printf("Dropout Value: %v\n", dropout)
+		// fmt.Printf("Random Value: %v\n", r.Float32())
+
+		// if dropout >= 0.0 && r.Float32() < dropout {
+		if dropout > 0.0 {
 			skip = append(skip, top.(Merge))
 		} else {
 			// Re-insert the skipped elements
@@ -309,6 +336,7 @@ func (w *Word) MergeAll(merges map[Pair]PairVal, dropoutOpt ...float32) {
 					C1: w.Symbols[top.(Merge).Pos].C,
 					C2: right.C,
 				}
+
 				m, ok := merges[targetNewPair]
 				if !ok || m.NewId == top.(Merge).NewId {
 					continue

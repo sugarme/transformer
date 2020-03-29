@@ -176,9 +176,10 @@ func NewTokenizer(model Model) Tokenizer {
 		PostProcessor: nil,
 		Decoder:       nil,
 
-		AddedTokens:   make(map[AddedToken]uint32),
-		AddedTokensR:  make(map[uint32]AddedToken),
-		SplitRe:       &regexp.Regexp{},
+		AddedTokens:  make(map[AddedToken]uint32),
+		AddedTokensR: make(map[uint32]AddedToken),
+		// SplitRe:       regexp.MustCompile(""),
+		SplitRe:       nil,
 		SpecialTokens: make(map[string]uint32),
 
 		Trunc:   nil,
@@ -279,71 +280,6 @@ type splitRes struct {
 
 // Encode encodes the given sentence
 func (t *Tokenizer) Encode(input EncodeInput) Encoding {
-	generateOutput := func(sentence string, typeId uint32) Encoding {
-		// Split into as many sequences as needed to avoid splitting
-		// on our added tokens
-		var splits []splitRes
-		var encodings []Encoding
-
-		splits = t.splitOnAddedTokens(sentence)
-		for _, s := range splits {
-			// If this is one of our added tokens, return an encoding directly
-			if s.Found {
-				e := NewEncoding(*normalizer.NewNormalizedFrom(s.Content), []uint32{s.Id}, []uint32{typeId}, []string{s.Content}, []Offsets{{0, uint(len(s.Content))}}, []uint32{0}, []uint32{1}, []Encoding{})
-
-				encodings = append(encodings, e)
-			}
-
-			// 1. Normalization
-			var normalized *normalizer.Normalized
-			if t.Normalizer != nil {
-				normalized = normalizer.NewNormalizedFrom(s.Content)
-			}
-
-			// 2. Pre-tokenization
-			var preTokenized *[]PreToken
-
-			if t.PreTokenizer != nil {
-				_, preTokenized = (*t.PreTokenizer).PreTokenize(normalized)
-			}
-
-			// 3. Model
-			output, _ := (*t.Model).Tokenize(*preTokenized)
-
-			var en Encoding
-
-			for _, t := range output {
-				en.Ids = append(en.Ids, t.Id)
-				en.Tokens = append(en.Tokens, t.Value)
-				en.Offsets = append(en.Offsets, t.Offsets)
-			}
-
-			for i := range output {
-				en.TypeIds[i] = typeId
-				en.SpecialTokenMask[i] = 0
-				en.AttentionMask[i] = 1
-			}
-
-			en.Overflowing = []Encoding{}
-
-			encodings = append(encodings, en)
-		} // end loop over splits
-
-		if len(encodings) == 0 {
-			return DefaultEncoding()
-		}
-
-		// split off at position 1
-		first := encodings[0]
-		others := encodings[1:]
-
-		// Put others to overflowing of first
-		for _, e := range others {
-			first.MergeWith(e)
-		}
-
-		return first
-	} // end of anonymous function `generateOutput`
 
 	var (
 		sentence, pair         string
@@ -355,23 +291,128 @@ func (t *Tokenizer) Encode(input EncodeInput) Encoding {
 	case Dual:
 		sentence = input.(Dual).Sentence
 		pair = input.(Dual).Pair
+	default:
+		sentence = input.(string)
 	}
 
-	encoding = generateOutput(sentence, 0)
+	encoding = t.generateOutput(sentence, 0)
 
 	if len(pair) > 0 {
-		pairEncoding = generateOutput(pair, 1)
+		pairEncoding = t.generateOutput(pair, 1)
 	}
+
+	fmt.Printf("Encoding Before PostProcess: %v\n", encoding)
 
 	// 4. Post processing
 	if t.PostProcessor != nil {
 		return (*t.PostProcessor).Process(encoding, pairEncoding)
+	} else {
+		encoding = t.postProcess(encoding, pairEncoding)
+
+		// NOTE.Should we return pairEncoding as well?
+		return encoding
+	}
+}
+
+func (t *Tokenizer) generateOutput(sentence string, typeId uint32) Encoding {
+	// Split into as many sequences as needed to avoid splitting
+	// on our added tokens
+	var splits []splitRes
+	var encodings []Encoding
+
+	fmt.Printf("sentence: %v\n", sentence)
+
+	splits = t.splitOnAddedTokens(sentence)
+
+	fmt.Printf("Splits: %v\n", splits)
+
+	for _, s := range splits {
+		// If this is one of our added tokens, return an encoding directly
+		if s.Found {
+			e := NewEncoding(*normalizer.NewNormalizedFrom(s.Content), []uint32{s.Id}, []uint32{typeId}, []string{s.Content}, []Offsets{{0, uint(len(s.Content))}}, []uint32{0}, []uint32{1}, []Encoding{})
+
+			encodings = append(encodings, e)
+
+		} else {
+			// 1. Normalization
+			var normalized *normalizer.Normalized
+			normalized = normalizer.NewNormalizedFrom(s.Content)
+			if t.Normalizer != nil {
+				nz := *t.Normalizer
+				norm, err := nz.Normalize(*normalized)
+				if err != nil {
+					log.Fatal(err)
+				}
+				normalized = &norm
+			}
+
+			fmt.Printf("Normalized: %v\n", normalized)
+
+			// 2. Pre-tokenization
+			var preTokenized *[]PreToken
+
+			if t.PreTokenizer != nil {
+				_, preTokenized = (*t.PreTokenizer).PreTokenize(normalized)
+			} else {
+				str := normalized.GetNormalized()
+				start := uint(0)
+				end := uint(len(str))
+				preToks := []PreToken{
+					PreToken{
+						Value: normalized.GetNormalized(),
+						Offsets: Offsets{
+							Start: start,
+							End:   end,
+						},
+					},
+				}
+				preTokenized = &preToks
+			}
+
+			fmt.Printf("Pretokenized: %v\n", preTokenized)
+
+			// 3. Model
+			output, err := (*t.Model).Tokenize(*preTokenized)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			fmt.Printf("Output: %v\n", output)
+
+			var en Encoding
+
+			for _, t := range output {
+				en.Ids = append(en.Ids, t.Id)
+				en.Tokens = append(en.Tokens, t.Value)
+				en.Offsets = append(en.Offsets, t.Offsets)
+
+				en.TypeIds = append(en.TypeIds, typeId)
+				en.SpecialTokenMask = append(en.SpecialTokenMask, 0)
+				en.AttentionMask = append(en.AttentionMask, 1)
+			}
+
+			en.Overflowing = []Encoding{}
+
+			encodings = append(encodings, en)
+
+		}
+
+	} // end loop over splits
+
+	if len(encodings) == 0 {
+		return DefaultEncoding()
 	}
 
-	encoding = t.postProcess(encoding, pairEncoding)
+	// split off at position 1
+	first := encodings[0]
+	others := encodings[1:]
 
-	// NOTE.Should we return pairEncoding as well?
-	return encoding
+	// Put others to overflowing of first
+	for _, e := range others {
+		first.MergeWith(e)
+	}
+
+	return first
 }
 
 // EncodeBatch encodes all sentences in concurrency
@@ -460,6 +501,8 @@ func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
 	rs := []rune(sentence)
 	var allSplits [][]int
 
+	fmt.Printf("Sentence:%v\n", sentence)
+
 	// if there's no splitRe (regular epxression to split), do nothing
 	if t.SplitRe == nil {
 		splits = append(splits, splitRes{sentence, 0, false})
@@ -469,6 +512,12 @@ func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
 	// matches contains slice of 2-element items (start and end byte position)
 	// of the matched strings
 	matches := t.SplitRe.FindAllStringIndex(sentence, -1)
+
+	// if no matches, just return the whole sentence
+	if len(matches) == 0 {
+		splits = append(splits, splitRes{sentence, 0, false})
+		return splits
+	}
 
 	for _, m := range matches {
 		splits = append(splits, splitRes{
@@ -489,7 +538,9 @@ func (t *Tokenizer) splitOnAddedTokens(sentence string) []splitRes {
 	}
 
 	// Check for the last piece
-	last := allSplits[len(allSplits)]
+	fmt.Printf("Num of All Splits: %v\n", len(allSplits))
+	fmt.Printf("All Splits: %v\n", allSplits)
+	last := allSplits[len(allSplits)-1]
 	if last[1] < len(sentence) {
 		allSplits = append(allSplits, []int{last[1], len(sentence)})
 	}
@@ -979,44 +1030,9 @@ func (t *Tokenizer) refreshAddedTokens() {
 	// merge with the one from special tokens
 	addedTokens = append(addedTokens, specialTokens...)
 
-	for _, t := range addedTokens {
-		var tok string
-		if t.IsSingleWord {
-			var (
-				firstB string // first boundary
-				lastB  string // last boundary
-			)
-			rs := []rune(t.Content)
-			firstChar := string(rs[0])
-			lastChar := string(rs[len(rs)])
-			isWordChar := func(char string) bool {
-				m, err := regexp.MatchString(`\w`, char)
-				if err != nil {
-					log.Fatal(err)
-				}
-				return m
-			}
-
-			if isWordChar(firstChar) {
-				firstB = fmt.Sprintf("%v", `\b`) // NOTE: back tick for raw string
-			} else {
-				firstB = ""
-			}
-
-			if isWordChar(lastChar) {
-				lastB = fmt.Sprintf("%v", `\b`)
-			} else {
-				lastB = ""
-			}
-
-			// Escape all regular expression metacharacters
-			escapeTok := regexp.QuoteMeta(t.Content)
-			tok = fmt.Sprintf("%v%v%v", firstB, escapeTok, lastB)
-		} else {
-			tok = regexp.QuoteMeta(t.Content)
-		}
-
-		newTokens = append(newTokens, tok)
+	for _, tok := range addedTokens {
+		newTok := getPattern(tok)
+		newTokens = append(newTokens, newTok)
 	}
 
 	if len(newTokens) == 0 {
@@ -1026,3 +1042,88 @@ func (t *Tokenizer) refreshAddedTokens() {
 	re := strings.Join(newTokens, "|")
 	t.SplitRe = regexp.MustCompile(re)
 }
+
+func getPattern(tok AddedToken) string {
+	var r string
+	if tok.IsSingleWord {
+		var (
+			firstB string // first boundary
+			lastB  string // last boundary
+		)
+		chars := strings.Split(tok.Content, "")
+		firstChar := chars[0]
+		lastChar := chars[len(chars)]
+
+		isWordChar := func(char string) bool {
+			m, err := regexp.MatchString(`\w`, char)
+			if err != nil {
+				log.Fatal(err)
+			}
+			return m
+		}
+
+		if isWordChar(firstChar) {
+			firstB = fmt.Sprintf("%v", `\b`) // NOTE: back tick for raw string
+		} else {
+			firstB = ""
+		}
+
+		if isWordChar(lastChar) {
+			lastB = fmt.Sprintf("%v", `\b`)
+		} else {
+			lastB = ""
+		}
+
+		// Escape all regular expression metacharacters
+		// so the return is safe to use in a regular expression
+		escapeTok := regexp.QuoteMeta(tok.Content)
+		r = fmt.Sprintf("%v%v%v", firstB, escapeTok, lastB)
+	} else {
+		r = regexp.QuoteMeta(tok.Content)
+	}
+
+	return r
+}
+
+/*
+ *     pub fn get_pattern(&self) -> String {
+ *         let mut r = if self.single_word {
+ *             let first_b = self
+ *                 .content
+ *                 .chars()
+ *                 .next()
+ *                 .map(|c| {
+ *                     if regex_syntax::is_word_character(c) {
+ *                         r"\b"
+ *                     } else {
+ *                         ""
+ *                     }
+ *                 })
+ *                 .unwrap();
+ *             let last_b = self
+ *                 .content
+ *                 .chars()
+ *                 .last()
+ *                 .map(|c| {
+ *                     if regex_syntax::is_word_character(c) {
+ *                         r"\b"
+ *                     } else {
+ *                         ""
+ *                     }
+ *                 })
+ *                 .unwrap();
+ *             format!(r"{}{}{}", first_b, regex::escape(&self.content), last_b)
+ *         } else {
+ *             regex::escape(&self.content)
+ *         };
+ *
+ *         if self.lstrip && self.rstrip {
+ *             r = format!(r"(\s)?{}(\s)?", r);
+ *         } else if self.lstrip {
+ *             r = format!(r"(\s)?{}", r);
+ *         } else if self.rstrip {
+ *             r = format!(r"{}(\s)?", r);
+ *         }
+ *
+ *         r
+ *     } */

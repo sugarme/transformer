@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
+	// "strconv"
 	"strings"
 
 	"github.com/sugarme/sermo/tokenizer"
@@ -103,15 +103,15 @@ func (bb *BpeBuilder) EndOfWordSuffix(endOfWordSuffix string) {
 func (bb *BpeBuilder) Build() (*BPE, error) {
 	var (
 		err    error
-		vocab  Vocab
-		merges Merges
+		vocab  *Vocab
+		merges *Merges
 		vocabR VocabR = make(map[uint32]string)
 		cache  *Cache
 		bpe    BPE
 	)
 
-	vocab = *bb.Config.Vocab
-	merges = *bb.Config.Merges
+	vocab = bb.Config.Vocab
+	merges = bb.Config.Merges
 
 	// validate dropout
 	if bb.Config.Dropout != nil {
@@ -125,16 +125,16 @@ func (bb *BpeBuilder) Build() (*BPE, error) {
 
 	// Read files if provided
 	if bb.Config.Files != nil {
-		vocab, merges, err := bpe.ReadFiles(bb.Config.Files.Vocab, bb.Config.Files.Merges)
+		vocab, merges, err = bpe.ReadFiles(bb.Config.Files.Vocab, bb.Config.Files.Merges)
 		if err != nil {
 			return nil, err
 		}
+
 		bb.Config.Vocab = vocab
 		bb.Config.Merges = merges
-
 	}
 
-	for k, v := range vocab {
+	for k, v := range *vocab {
 		vocabR[v] = k
 	}
 
@@ -145,9 +145,9 @@ func (bb *BpeBuilder) Build() (*BPE, error) {
 	}
 
 	bpe = BPE{
-		Vocab:                   &vocab,
+		Vocab:                   vocab,
 		VocabR:                  &vocabR,
-		Merges:                  &merges,
+		Merges:                  merges,
 		Cache:                   cache,
 		Dropout:                 bb.Config.Dropout,
 		UnkToken:                bb.Config.UnkToken,
@@ -248,7 +248,7 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 
 	var (
 		vocab  Vocab
-		merges Merges
+		merges Merges = make(map[Pair]PairVal)
 	)
 
 	err = json.Unmarshal(vocabBytes, &vocab)
@@ -287,17 +287,20 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 
 		a, ok := vocab[parts[0]]
 		if !ok {
-			err = fmt.Errorf("Read merge file error: value for %s key not found.", parts[0])
-			return nil, nil, err
+			// err = fmt.Errorf("Read merge file error: part a value for '%s' key not found.", parts[0])
+			continue
+			// return nil, nil, err
 		}
 
 		b, ok := vocab[parts[1]]
 		if !ok {
-			err = fmt.Errorf("Read merge file error: value for %s key not found.", parts[1])
-			return nil, nil, err
+			// err = fmt.Errorf("Read merge file error: part b value for '%s' key not found.", parts[1])
+			continue
+			// return nil, nil, err
 		}
 
 		pair := Pair{a, b}
+		// newToken := fmt.Sprintf("%v%v", parts[0], parts[1])
 		newToken := fmt.Sprintf("%v%v", parts[0], parts[1])
 		newId, ok := vocab[newToken]
 		if !ok {
@@ -305,19 +308,19 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 			return nil, nil, err
 		}
 
-		newTokenInt, err := strconv.ParseInt(newToken, 10, 64)
+		// newTokenInt, err := strconv.ParseInt(newToken, 10, 64)
 
 		err = util.TraceError(err)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		pairVal := PairVal{uint32(newTokenInt), newId}
+		// pairVal := PairVal{uint32(newTokenInt), newId}
+		pairVal := PairVal{uint32(lineNum), newId}
 
 		merges[pair] = pairVal
 
 		lineNum += 1
-
 	}
 
 	if s.Err() != nil {
@@ -325,7 +328,6 @@ func (b *BPE) ReadFiles(vocabF string, mergesF string) (*Vocab, *Merges, error) 
 	}
 
 	return &vocab, &merges, nil
-
 }
 
 // ClearCache reset the cache
@@ -352,6 +354,7 @@ func (b *BPE) GetContinuingSubwordPrfix() *string {
 
 // MergeWord merges given word
 func (b *BPE) MergeWord(w string) *Word {
+
 	word := NewWord()
 
 	chars := strings.Split(w, "")
@@ -381,17 +384,28 @@ func (b *BPE) MergeWord(w string) *Word {
 		}
 
 		// Look its id up
-		if id, ok := (*b.Vocab)[s]; ok { // found
+
+		vocab := *b.Vocab
+		// if id, ok := (*b.Vocab)[s]; ok { // found
+		if id, ok := vocab[s]; ok { // found
 			word.Add(id)
-		} else if b.UnkToken != nil { // not found, add `unk`
-			// get `unk` id
-			unkId := (*b.Vocab)[*b.UnkToken]
-			// add `unk`
-			word.Add(unkId)
+		} else { // not found, add `unk`
+			if b.UnkToken != nil {
+				// get `unk` id
+				unkId := (*b.Vocab)[*b.UnkToken]
+				// add `unk`
+				word.Add(unkId)
+			} else {
+
+			}
 		}
 	}
 
-	word.MergeAll(*b.Merges, *b.Dropout)
+	if b.Dropout != nil {
+		word.MergeAll(*b.Merges, *b.Dropout)
+	} else {
+		word.MergeAll(*b.Merges)
+	}
 
 	return word
 }
@@ -411,6 +425,7 @@ func (b *BPE) WordToTokens(word Word, initialOffsets tokenizer.Offsets) ([]token
 	if err != nil {
 		return nil, err
 	}
+
 	for _, z := range zWord {
 		tok := tokenizer.Token{
 			Id:      z.Id,
@@ -434,6 +449,7 @@ func (b *BPE) WordToTokens(word Word, initialOffsets tokenizer.Offsets) ([]token
 // Tokenize tokenizes sentences into tokens
 // NOTE: sentence is []PreToken struct{Value string, Offsets Offsets}
 func (b *BPE) Tokenize(sentence []tokenizer.PreToken) ([]tokenizer.Token, error) {
+
 	if len(sentence) == 0 {
 		return []tokenizer.Token{}, nil
 	}
@@ -447,11 +463,10 @@ func (b *BPE) Tokenize(sentence []tokenizer.PreToken) ([]tokenizer.Token, error)
 	if b.Dropout != nil {
 		cachedWords = nil
 	} else {
-		for _, k := range sentence {
-			keys = append(keys, k.Value)
-		}
-		cachedWords = b.Cache.GetValues(keys)
-
+		// for _, k := range sentence {
+		// keys = append(keys, k.Value)
+		// }
+		// cachedWords = b.Cache.GetValues(keys)
 	}
 
 	var shouldUpdateCache bool = false
@@ -577,10 +592,10 @@ func (b *BPE) Save(dir string, nameOpt ...string) error {
 
 	// Create lines of merges
 	for _, p := range pairRanks {
-		// line := fmt.Sprintf("%v %v\n", p.Pair.C1, p.Pair.C2)
+		// line := fmt.Sprintf("%v %v", p.Pair.C1, p.Pair.C2)
 		c1 := b.IdToToken(p.Pair.C1)
 		c2 := b.IdToToken(p.Pair.C2)
-		line := fmt.Sprintf("%v %v\n", c1, c2)
+		line := fmt.Sprintf("%v %v", c1, c2)
 		lines = append(lines, line)
 	}
 
