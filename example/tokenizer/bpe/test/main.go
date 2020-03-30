@@ -21,7 +21,11 @@ func main() {
 
 	tk.WithPreTokenizer(bl)
 
-	en := tk.Encode("Mi estas Julien.")
+	sentence := "Mi estas Julien."
+
+	en := tk.Encode(sentence)
+
+	fmt.Printf("Sentence: '%v'\n", sentence)
 
 	for _, tok := range en.GetTokens() {
 		fmt.Printf("'%v'\n", tok)

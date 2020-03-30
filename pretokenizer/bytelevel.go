@@ -132,32 +132,30 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 	// (which is 2 element slice loc[0] start - inclusive
 	// and loc[1] end - exclusive)
 	locs := splitRE.FindAllStringIndex(normalizedString, -1)
+
 	bytes := []byte(normalizedString)
-	// fmt.Printf("Total string length: %v\n", len(bytes))
 
 	for _, loc := range locs {
 		start := loc[0]
 		end := loc[1]
 
-		// if last `char` is a whitespace, followed by a non-whitespace
-		// remove this whitespace
 		last := string(bytes[loc[1]-1]) // -1 because of end exclusive
 
 		var next string
 		// Exclude last boundary
 		if loc[1] == len(bytes) {
-			end -= 1
+			// end -= 1
 			next = ""
 		} else {
 			next = string(bytes[loc[1]])
 		}
 
+		// if last `char` is a whitespace, followed by a non-whitespace
+		// remove this whitespace
 		if last == " " && next != " " {
 			end -= 1
 		}
 
-		// If first `char` is not a whitespace but the previous one
-		// was, add that whitespace
 		first := string(bytes[loc[0]])
 		var prev string
 		// Exclude the first `char` of string
@@ -166,6 +164,9 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 		} else {
 			prev = ""
 		}
+
+		// If first `char` is not a whitespace but the previous one
+		// was, add that whitespace
 		if first != " " && prev == " " {
 			start -= 1
 		}
@@ -184,23 +185,25 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 	var changedToks [][]Change
 	var changeMap []normalizer.ChangeMap
 	var n = 0
-	// stringLen := len([]byte(normalizedString))
-	for _, pos := range positions {
-		tok := normalizedString[pos.Start:(pos.End + 1)] // +1 to include `End` position
-		// tok := normalizedString[pos.Start:pos.End]
+
+	for i, pos := range positions {
+		end := pos.End
+		if i == len(positions) {
+			end = pos.End
+		}
+
+		tok := normalizedString[pos.Start:end]
+
 		tokChars := strings.Split(tok, "")
 
 		var changedTok []Change
 
-		for i := 0; i < len(tokChars)-1; i++ {
+		for i := 0; i < len(tokChars); i++ {
 			size := len(tokChars[i]) // number of bytes for current `char`
 			end := n + size
 
-			// Exclude last boudary
-			if end == len(bytes) {
-				end -= 1
-			}
 			tokBytes := []byte(normalizedString[n:end])
+
 			n += size
 
 			for idx, b := range tokBytes {
@@ -238,7 +241,10 @@ func (bl *ByteLevel) PreTokenize(normalized *normalizer.Normalized) (*normalizer
 		totalLen += len
 		tok := strings.Join(chars, "")
 		offsets := tokenizer.Offsets{Start: uint(totalLen - len), End: uint(totalLen)}
-		res = append(res, tokenizer.PreToken{tok, offsets})
+		res = append(res, tokenizer.PreToken{
+			Value:   tok,
+			Offsets: offsets,
+		})
 	}
 
 	return normalized, &res

@@ -460,8 +460,7 @@ func (b *BPE) Tokenize(sentence []tokenizer.PreToken) ([]tokenizer.Token, error)
 		return []tokenizer.Token{}, nil
 	}
 
-	var encoded []tokenizer.Token = make([]tokenizer.Token, len(sentence))
-
+	var encoded []tokenizer.Token
 	var cachedWords []Word
 	var keys []string
 
