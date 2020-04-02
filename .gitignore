@@ -3,6 +3,7 @@
 *.swo
 
 input/
+example/gorgonia/testdata/
 *.dat
 *.log
 

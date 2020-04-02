@@ -27,8 +27,10 @@ func main() {
 
 	fmt.Printf("Sentence: '%v'\n", sentence)
 
-	for _, tok := range en.GetTokens() {
-		fmt.Printf("'%v'\n", tok)
-	}
+	fmt.Printf("Tokens: %v\n", en.GetTokens())
+
+	// for _, tok := range en.GetTokens() {
+	// fmt.Printf("'%v'\n", tok)
+	// }
 
 }
