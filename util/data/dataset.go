@@ -17,11 +17,12 @@ type MapDataset struct {
 
 // IterableDataset represents an interatble data samples
 type IterableDataset struct {
-	data map[interface{}]interface{}
+	MapDataset
+	pointer int // current pointer for iterator
 }
 
 // Implement iterator interface
-func (itd *IterableDataset) Next() (interface{}, bool) {
+func (itd *IterableDataset) Next() (value interface{}, ok bool) {
 
 	// TODO: implement this
 	return "", true
@@ -32,9 +33,3 @@ func (itd *IterableDataset) Add() {}
 // Implement Dataset
 func (itd *IterableDataset) GetItem() {}
 func (itd *IterableDataset) Len()     {}
-
-// // TODO:
-// type TensorDataset struct{}
-// type ConcatDataset struct{}
-// type ChainDataset struct{}
-// type Subset struct{}
