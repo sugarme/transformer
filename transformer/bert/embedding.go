@@ -33,5 +33,5 @@ func NewBertEmbedding(p nn.Path, config BertConfig) (BertEmbeddings, error) {
 // Implement BertEmbedding interface
 func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (ts.Tensor, string) {
 
-	return ts.Tensor{}, nil
+	return ts.New(), ""
 }
