@@ -34,18 +34,20 @@ type Embedding struct {
 }
 
 func (e *Embedding) Forward(xs *ts.Tensor) *ts.Tensor {
-	return &Tensor.Embedding{
-		e.Ws,
-		xs,
-		e.Config.PaddingIdx,
-		e.Config.ScaleGradByFreq,
-		e.Config.Sparse,
-	}
+	// return &Tensor.Embedding{
+	// e.Ws,
+	// xs,
+	// e.Config.PaddingIdx,
+	// e.Config.ScaleGradByFreq,
+	// e.Config.Sparse,
+	// }
+
+	return nil
 }
 
-func Embed(vs interface{}, numEmbeddings, embeddingDim int64, config EmbeddingConfig) *Embedding {
+func Embed(p Path, numEmbeddings, embeddingDim int64, config EmbeddingConfig) *Embedding {
 	return &Embedding{
-		Ws:     vs.Var("weight", []int64{numEmbeddings, embeddingDim}, config.WsInit),
+		Ws:     p.Var("weight", []int64{numEmbeddings, embeddingDim}, config.WsInit),
 		Config: config,
 	}
 }
