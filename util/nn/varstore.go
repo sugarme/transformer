@@ -116,6 +116,136 @@ func (vs *VarStore) Root() Path {
 	}
 }
 
+// Save save the `varstore` variable values to a file
+// Weight values for all the tensors currently stored in the `varstore`
+// will be saved to a file.
+func (vs *VarStore) Save(path string) error {
+	vs.Variables.Mut.Lock()
+	defer vs.Variables.Mut.Unlock()
+
+	variables := vs.Variables.NamedVariables
+
+	var namedTensors []ts.Tensor
+
+	for _, t := range variables {
+		namedTensors = append(namedTensors, t)
+	}
+
+	// TODO: save nameTensors to file
+	return nil
+}
+
+// Load loads the `varstore` variable values from a file.
+// weight values for all the tensors currently stored in
+// the `varstore` gets loaded from the given file. The set
+// of variables stored in the `varstore` is not changed, only
+// the values for these tensors are modified.
+func (vs *VarStore) Load(path string) error {
+	// TODO: load multi with device
+	/* let named_tensors = Tensor::load_multi_with_device(&path, self.device)?;
+	 * let named_tensors: HashMap<_, _> = named_tensors.into_iter().collect();
+	 * let mut variables = self.variables_.lock().unwrap();
+	 * for (name, var) in variables.named_variables.iter_mut() {
+	 *     match named_tensors.get(name) {
+	 *         Some(src) => {
+	 *             crate::no_grad(|| var.f_copy_(src).map_err(|e| format_err!("{}: {}", name, e)))?
+	 *         }
+	 *         None => return Err(format_err!("cannot find {} in {:?}", name, path.as_ref())),
+	 *     }
+	 * }
+	 * Ok(()) */
+
+	return nil
+}
+
+// LoadPartial loads the `varstore` variable values from a file if it exists.
+// Weight values for the tensors currently stored in the `varstore` and the given
+// file get loaded from the given file. If a variable in the var store is not present
+// in the given file, it is skipped and its values are not updated. This method should
+// be used if pre-trained weight for only parts of the model are available.
+// The set of variables stored in the `varstore` is not changed, only the values
+// for these tensors are modified.
+func (vs *VarStore) LoadPartial(path string) error {
+	// TODO: implement
+	/* let named_tensors = Tensor::load_multi_with_device(&path, self.device)?;
+	 * let named_tensors: HashMap<_, _> = named_tensors.into_iter().collect();
+	 * let mut variables = self.variables_.lock().unwrap();
+	 * let mut missing_variables = Vec::new();
+	 * for (name, var) in variables.named_variables.iter_mut() {
+	 *     match named_tensors.get(name) {
+	 *         Some(src) => {
+	 *             crate::no_grad(|| var.f_copy_(src).map_err(|e| format_err!("{}: {}", name, e)))?
+	 *         }
+	 *         None => {
+	 *             missing_variables.push(name.to_owned());
+	 *         }
+	 *     }
+	 * }
+	 * Ok(missing_variables) */
+
+	return nil
+}
+
+// Freeze freezes a `varstore`
+// Gradients for the variables in this store are not tracked anymore.
+func (vs *VarStore) Freeze() {
+	vs.Variables.Mut.Lock()
+	defer vs.Variables.Mut.Unlock()
+
+	variables := vs.Variables.NamedVariables
+
+	for _, v := range variables {
+		// TODO:
+		fmt.Println(v)
+		// v.SetRequiresGrad(false)
+	}
+}
+
+// Unfreeze unfreezes a `varstore`
+// Gradients for the variables in this store are tracked again.
+func (vs *VarStore) Unfreeze() {
+	vs.Variables.Mut.Lock()
+	defer vs.Variables.Mut.Unlock()
+
+	variables := vs.Variables.NamedVariables
+
+	for _, v := range variables {
+		// TODO:
+		fmt.Println(v)
+		// v.SetRequiresGrad(true)
+	}
+}
+
+// Copy copies variable values from a source `varstore` to this `varstore`
+// All the variables in this `varstore` have to exist with the same name
+// in the source `varstore`, otherwise return an error.
+func (vs *VarStore) Copy(src VarStore) error {
+	vs.Variables.Mut.Lock()
+	defer vs.Variables.Mut.Unlock()
+	// variables := vs.Variables
+
+	src.Variables.Mut.Lock()
+	defer src.Variables.Mut.Unlock()
+	// srcVariables := src.Variables
+
+	/*   device := vs.device
+	 *
+	 *   for name, _ := range variables.NamedVariables {
+	 *     if ok, _ := srcVariables.NamedVariables[name]; !ok {
+	 *       err := fmt.Errorf("cannot find %v in the source var store", name)
+	 *       continue
+	 *     }
+	 *
+	 *     srcVar = srcVariables.NamedVariables[name]
+	 *     // TODO: copy to device
+	 *     // crate::no_grad(|| var.f_copy_(&src_var.to_device(device)))?;
+	 *
+	 *   } */
+
+	return nil
+
+}
+
 // Var creates a new variable
 // The new variable is named according to the name parameter
 // and has the specified shape. The variable is trainable, its
