@@ -19,7 +19,7 @@ const SEP string = "."
 type Variables struct {
 	NamedVariables     map[string]ts.Tensor
 	TrainableVariables []ts.Tensor
-	Mut                sync.Mutex
+	Mut                *sync.Mutex
 }
 
 /// VarStore is used to store variables used by one
@@ -52,7 +52,7 @@ func NewVarStore(device Device) VarStore {
 	variables := Variables{
 		NamedVariables:     make(map[string]ts.Tensor),
 		TrainableVariables: []ts.Tensor{},
-		Mut:                sync.Mutex{},
+		Mut:                &sync.Mutex{},
 	}
 
 	return VarStore{
@@ -312,7 +312,8 @@ func (p *Path) getOrAddWithLock(name string, tensor ts.Tensor, trainable bool, v
 
 	// TODO: Implement
 
-	return ts.New()
+	// return ts.New()
+	return tensor
 }
 
 // ZerosNoTrain creates a new variable initialized with zeroes.
@@ -456,3 +457,76 @@ func (p *Path) Entry(name string) Entry {
 
 // Implement methods for `Entry`
 // ================================
+
+// OrVar returns the existing entry if, otherwise create a new variable.
+//
+// If this entry name matches the name of a variables stored in the
+// var store, the corresponding tensor is returned. Otherwise a new
+// variable is added to the var-store with the entry name and is
+// initialized according to the init parameter.
+func (e *Entry) OrVar(dims []int, init InitT) ts.Tensor {
+	v := Init(init, dims, e.Path.Device())
+	path := e.Path
+
+	return path.getOrAddWithLock(e.Name, v, true, e.Variables)
+}
+
+// OrVarCopy returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrVarCopy(tensor ts.Tensor) ts.Tensor {
+	v := e.OrZeros([]int{tensor.Size()})
+	return v
+}
+
+// Returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrZeros(dims []int) ts.Tensor {
+	return e.OrVar(dims, 0.0)
+}
+
+// OrKaimingUniform returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrKaimingUniform(dims []int) ts.Tensor {
+	return e.OrVar(dims, KaimingUniform)
+}
+
+// OrOnes returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrOnes(dims []int) ts.Tensor {
+	return e.OrVar(dims, 1.0)
+}
+
+// OrOnesNoTrain returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrOnesNoTrain(dims []int) ts.Tensor {
+
+	shape := ts.WithShape(dims...)
+
+	o := ts.New(shape)
+
+	path := e.Path
+
+	return path.getOrAddWithLock(e.Name, o, true, e.Variables)
+}
+
+// OrRandn returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrRandn(dims []int, mean, stdev float64) ts.Tensor {
+	init := rand.NormFloat64()*stdev + mean
+	return e.OrVar(dims, init)
+}
+
+// OrRandnStandard returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrRandnStandard(dims []int) ts.Tensor {
+	init := rand.NormFloat64()
+	return e.OrVar(dims, init)
+}
+
+// OrUniform returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrUniform(dims []int, lo, up float64) ts.Tensor {
+	init := NewUniform(lo, up)
+	return e.OrVar(dims, init)
+}
+
+// OrZerosNoTrain returns the existing entry if, otherwise create a new variable.
+func (e *Entry) OrZerosNoTrain(dims []int) ts.Tensor {
+
+	shape := ts.WithShape(dims...)
+	z := ts.New(shape)
+
+	return e.Path.getOrAddWithLock(e.Name, z, true, e.Variables)
+}

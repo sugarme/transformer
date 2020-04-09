@@ -45,9 +45,11 @@ func (e *Embedding) Forward(xs *ts.Tensor) *ts.Tensor {
 	return nil
 }
 
-func Embed(p Path, numEmbeddings, embeddingDim int64, config EmbeddingConfig) *Embedding {
+func Embed(p Path, numEmbeddings, embeddingDim int, config EmbeddingConfig) *Embedding {
+	// p.VarStore.Variables.Mut.Lock()
+	// defer p.VarStore.Variables.Mut.Unlock()
 	return &Embedding{
-		Ws:     p.Var("weight", []int64{numEmbeddings, embeddingDim}, config.WsInit),
+		Ws:     p.Var("weight", []int{numEmbeddings, embeddingDim}, config.WsInit),
 		Config: config,
 	}
 }

@@ -3,7 +3,7 @@ package nn
 import (
 	"math/rand"
 
-	G "gorgonia.org/gorgonia"
+	// G "gorgonia.org/gorgonia"
 	ts "gorgonia.org/tensor"
 )
 
@@ -51,8 +51,9 @@ var internalMaps = map[initEnum]InitT{
 // and initialization value
 func Init(i InitT, dims []int, device Device) ts.Tensor {
 
-	dt := ts.Of(i.(ts.Dtype))
-	shape := ts.WithShape(dims...)
+	// dt := ts.Of(i.(ts.Dtype))
+	dt := ts.Of(ts.Float64)
+	shape := ts.WithShape(len(dims))
 	// TODO: init with device
 
 	return ts.New(dt, shape)
