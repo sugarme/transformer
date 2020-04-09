@@ -30,7 +30,7 @@ func DefaultEmbeddingConfig() *EmbeddingConfig {
 // This is commonly used to store word embeddings.
 type Embedding struct {
 	Ws     ts.Tensor
-	Config EmbeddingConfig
+	Config *EmbeddingConfig
 }
 
 func (e *Embedding) Forward(xs *ts.Tensor) *ts.Tensor {
@@ -45,7 +45,7 @@ func (e *Embedding) Forward(xs *ts.Tensor) *ts.Tensor {
 	return nil
 }
 
-func Embed(p Path, numEmbeddings, embeddingDim int, config EmbeddingConfig) *Embedding {
+func Embed(p Path, numEmbeddings, embeddingDim int, config *EmbeddingConfig) *Embedding {
 	// p.VarStore.Variables.Mut.Lock()
 	// defer p.VarStore.Variables.Mut.Unlock()
 	return &Embedding{

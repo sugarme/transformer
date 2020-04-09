@@ -120,7 +120,7 @@ func (vs *VarStore) Root() Path {
 	}
 }
 
-// Save save the `varstore` variable values to a file
+// Save saves the `varstore` variable values to a file
 // Weight values for all the tensors currently stored in the `varstore`
 // will be saved to a file.
 func (vs *VarStore) Save(path string) error {

@@ -28,3 +28,6 @@ func TestNn_New(t *testing.T) {
 	}
 
 }
+
+func TestNn_Save(t *testing.T) {
+}

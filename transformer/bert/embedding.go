@@ -1,6 +1,8 @@
 package bert
 
 import (
+	"fmt"
+
 	"github.com/sugarme/sermo/util/nn"
 
 	G "gorgonia.org/gorgonia"
@@ -29,6 +31,18 @@ type BertEmbeddings struct {
 func NewBertEmbedding(p nn.Path, config BertConfig) (BertEmbeddings, error) {
 	embeddingConfig := nn.DefaultEmbeddingConfig()
 	embeddingConfig.PaddingIdx = 0
+
+	wEmbedPath := p.Sub("wordEmbeddings")
+	wordEmbeddings := nn.Embed(wEmbedPath, int(config.VocabSize), int(config.HiddenSize), embeddingConfig)
+	fmt.Println(wordEmbeddings)
+
+	posEmbedPath := p.Sub("PositionEmbeddings")
+	positionEmbeddings := nn.Embed(posEmbedPath, int(config.VocabSize), int(config.HiddenSize), embeddingConfig)
+	fmt.Println(positionEmbeddings)
+
+	ttEmbedPath := p.Sub("tokenTypeEmbeddings")
+	tokenTypeEmbeddings := nn.Embed(ttEmbedPath, int(config.VocabSize), int(config.HiddenSize), embeddingConfig)
+	fmt.Println(tokenTypeEmbeddings)
 
 	//TODO: continue ...
 
