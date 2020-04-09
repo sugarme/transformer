@@ -3,6 +3,7 @@ package nn
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"strings"
 	"sync"
 
@@ -42,6 +43,9 @@ type Entry struct {
 	Variables Variables
 	Path      Path
 }
+
+// Implement methods for `VarStore`
+// ================================
 
 // NewVarStore create a new variable store on the specified device
 func NewVarStore(device Device) VarStore {
@@ -246,15 +250,39 @@ func (vs *VarStore) Copy(src VarStore) error {
 
 }
 
-// Var creates a new variable
-// The new variable is named according to the name parameter
-// and has the specified shape. The variable is trainable, its
-// gradient will be tracked. The variable uses a float tensor
-// initialized as per the related argument.
-func (p *Path) Var(name string, dims []int64, init InitT) ts.Tensor {
-	v := Init(init, dims, p.VarStore.Device())
+// Implement methods for `Path` struct
+// ===================================
 
-	return p.add(name, v, true)
+// Sub gets a sub-path of the given path
+func (p *Path) Sub(s string) Path {
+	if strings.Contains(s, SEP) {
+		log.Fatalf("sub name cannot contain %v %v", SEP, s)
+	}
+
+	path := p.Path
+	path = append(path, s)
+
+	return Path{
+		Path:     path,
+		VarStore: p.VarStore,
+	}
+}
+
+// Device gets the device where the `varstore` variables are stored
+func (p *Path) Device() Device {
+	return p.VarStore.device
+}
+
+func (p *Path) path(name string) string {
+	if strings.Contains(name, SEP) {
+		log.Fatalf("variable name cannot contain %v %v", SEP, name)
+	}
+
+	if p.VarStore.IsEmpty() {
+		return name
+	}
+
+	return fmt.Sprintf("%v%v%v", strings.Join(p.Path, SEP), SEP, name)
 }
 
 func (p *Path) add(name string, tensor ts.Tensor, trainable bool) ts.Tensor {
@@ -280,387 +308,151 @@ func (p *Path) add(name string, tensor ts.Tensor, trainable bool) ts.Tensor {
 
 }
 
-func (p *Path) path(name string) string {
-	if strings.Contains(name, SEP) {
-		log.Fatalf("variable name cannot contain %v %v", SEP, name)
-	}
+func (p *Path) getOrAddWithLock(name string, tensor ts.Tensor, trainable bool, variables Variables) ts.Tensor {
 
-	if p.VarStore.IsEmpty() {
-		return name
-	}
+	// TODO: Implement
 
-	return fmt.Sprintf("%v%v%v", strings.Join(p.Path, SEP), SEP, name)
+	return ts.New()
 }
 
-// TODO: continue... the below methods
+// ZerosNoTrain creates a new variable initialized with zeroes.
+// The new variable is named according to the name parameter
+// and has the specified shape. The variable will not be trainable
+// so gradients will not be tracked.
+func (p *Path) ZerosNoTrain(name string, dims []int64) ts.Tensor {
 
-/* //! Variable stores.
- *
- * /// An Entry holds an entry corresponding to a given name in Path.
- * #[derive(Debug)]
+	// TODO: implement tensor
+	z := ts.New()
 
- * impl VarStore {
- *
- *     /// Saves the var-store variable values to a file.
- *     ///
- *     /// Weight values for all the tensors currently stored in the
- *     /// var-store gets saved in the given file.
- *     pub fn save<T: AsRef<std::path::Path>>(&self, path: T) -> Fallible<()> {
- *         let variables = self.variables_.lock().unwrap();
- *         let named_tensors = variables.named_variables.iter().collect::<Vec<_>>();
- *         Tensor::save_multi(named_tensors.as_slice(), path)
- *     }
- *
- *     /// Loads the var-store variable values from a file.
- *     ///
- *     /// Weight values for all the tensors currently stored in the
- *     /// var-store gets loaded from the given file. Note that the set of
- *     /// variables stored in the var-store is not changed, only the values
- *     /// for these tensors are modified.
- *     pub fn load<T: AsRef<std::path::Path>>(&mut self, path: T) -> Fallible<()> {
- *         let named_tensors = Tensor::load_multi_with_device(&path, self.device)?;
- *         let named_tensors: HashMap<_, _> = named_tensors.into_iter().collect();
- *         let mut variables = self.variables_.lock().unwrap();
- *         for (name, var) in variables.named_variables.iter_mut() {
- *             match named_tensors.get(name) {
- *                 Some(src) => {
- *                     crate::no_grad(|| var.f_copy_(src).map_err(|e| format_err!("{}: {}", name, e)))?
- *                 }
- *                 None => return Err(format_err!("cannot find {} in {:?}", name, path.as_ref())),
- *             }
- *         }
- *         Ok(())
- *     }
- *
- *     /// Loads the var-store variable values from a file if it exists.
- *     ///
- *     /// Weight values for the tensors currently stored in the var-store and the given file get
- *     /// loaded from the given file. If a variable in the var store is not present in the given file,
- *     /// it is skipped and its values are not updated. This method should be used if pre-trained
- *     /// weight for only parts of the model are available.
- *     /// Note that the set of variables stored in the var-store is not changed, only the values
- *     /// for these tensors are modified.
- *     ///
- *     /// Returns a String Vector containing the names of missing variables.
- *     pub fn load_partial<T: AsRef<std::path::Path>>(&mut self, path: T) -> Fallible<Vec<String>> {
- *         let named_tensors = Tensor::load_multi_with_device(&path, self.device)?;
- *         let named_tensors: HashMap<_, _> = named_tensors.into_iter().collect();
- *         let mut variables = self.variables_.lock().unwrap();
- *         let mut missing_variables = Vec::new();
- *         for (name, var) in variables.named_variables.iter_mut() {
- *             match named_tensors.get(name) {
- *                 Some(src) => {
- *                     crate::no_grad(|| var.f_copy_(src).map_err(|e| format_err!("{}: {}", name, e)))?
- *                 }
- *                 None => {
- *                     missing_variables.push(name.to_owned());
- *                 }
- *             }
- *         }
- *         Ok(missing_variables)
- *     }
- *
- *     /// Freezes a var store.
- *     ///
- *     /// Gradients for the variables in this store are not tracked
- *     /// anymore.
- *     pub fn freeze(&mut self) {
- *         let variables = self.variables_.lock().unwrap();
- *         for variable in variables.trainable_variables.iter() {
- *             let _v = variable.set_requires_grad(false);
- *         }
- *     }
- *
- *     /// Unfreezes a var store.
- *     ///
- *     /// Gradients for the variables in this store are tracked again.
- *     pub fn unfreeze(&mut self) {
- *         let variables = self.variables_.lock().unwrap();
- *         for variable in variables.trainable_variables.iter() {
- *             let _v = variable.set_requires_grad(true);
- *         }
- *     }
- *
- *     /// Copies variable values from a source var store to this var store.
- *     ///
- *     /// All the variables in this var store have to exist with the same
- *     /// name in the source var store, otherwise an error is returned.
- *     pub fn copy(&mut self, src: &VarStore) -> Fallible<()> {
- *         let mut variables = self.variables_.lock().unwrap();
- *         let src_variables = src.variables_.lock().unwrap();
- *         let device = self.device;
- *         for name in variables.named_variables.keys() {
- *             if !src_variables.named_variables.contains_key(name) {
- *                 bail!("cannot find {} in the source var store", name);
- *             }
- *         }
- *         for (name, var) in variables.named_variables.iter_mut() {
- *             let src_var = src_variables.named_variables.get(name).unwrap();
- *             crate::no_grad(|| var.f_copy_(&src_var.to_device(device)))?;
- *         }
- *         Ok(())
- *     }
- * }
- *
- * impl<'a> Path<'a> {
- *     /// Gets a sub-path of the given path.
- *     pub fn sub<T: std::string::ToString>(&'a self, s: T) -> Path<'a> {
- *         let s = s.to_string();
- *         if s.chars().any(|x| x == SEP) {
- *             panic!("sub name cannot contain {} {}", SEP, s);
- *         }
- *         let mut path = self.path.clone();
- *         path.push(s);
- *         Path {
- *             path,
- *             var_store: self.var_store,
- *         }
- *     }
- *
- *     /// Gets the device where the var-store variables are stored.
- *     pub fn device(&self) -> Device {
- *         self.var_store.device
- *     }
- *
- *
- *
- *     fn get_or_add_with_lock(
- *         &self,
- *         name: &str,
- *         tensor: Tensor,
- *         trainable: bool,
- *         mut variables: MutexGuard<Variables>,
- *     ) -> Tensor {
- *         let path = self.path(name);
- *         if let Some(var) = variables.named_variables.get(&path) {
- *             return var.shallow_clone();
- *         }
- *
- *         let tensor = if trainable {
- *             tensor.set_requires_grad(true)
- *         } else {
- *             tensor
- *         };
- *         if trainable {
- *             variables.trainable_variables.push(tensor.shallow_clone());
- *         }
- *         variables
- *             .named_variables
- *             .insert(path, tensor.shallow_clone());
- *         tensor
- *     }
- *
- *     /// Creates a new variable initialized with zeros.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable will not be trainable so
- *     /// gradients will not be tracked.
- *     /// The variable uses a float tensor initialized with zeros.
- *     pub fn zeros_no_train(&self, name: &str, dims: &[i64]) -> Tensor {
- *         let z = Tensor::zeros(dims, (Kind::Float, self.device()));
- *         self.add(name, z, false)
- *     }
- *
- *     /// Creates a new variable initialized with ones.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable will not be trainable so
- *     /// gradients will not be tracked.
- *     /// The variable uses a float tensor initialized with ones.
- *     pub fn ones_no_train(&self, name: &str, dims: &[i64]) -> Tensor {
- *         let o = Tensor::ones(dims, (Kind::Float, self.device()));
- *         self.add(name, o, false)
- *     }
- *
- *     /// Creates a new variable initialized with zeros.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable is trainable, its gradient
- *     /// will be tracked.
- *     /// The variable uses a float tensor initialized with zeros.
- *     pub fn zeros(&self, name: &str, dims: &[i64]) -> Tensor {
- *         self.var(name, dims, Init::Const(0.))
- *     }
- *
- *     /// Creates a new variable initialized with ones.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable is trainable, its gradient
- *     /// will be tracked.
- *     /// The variable uses a float tensor initialized with ones.
- *     pub fn ones(&self, name: &str, dims: &[i64]) -> Tensor {
- *         self.var(name, dims, Init::Const(1.))
- *     }
- *
- *     /// Creates a new variable initialized randomly with normal distribution.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable is trainable, its gradient
- *     /// will be tracked.
- *     /// The variable uses a float tensor initialized randomly using a
- *     /// standard normal distribution.
- *     pub fn randn_standard(&self, name: &str, dims: &[i64]) -> Tensor {
- *         let init = Init::Randn {
- *             mean: 0.,
- *             stdev: 1.,
- *         };
- *         self.var(name, dims, init)
- *     }
- *
- *     /// Creates a new variable initialized randomly with normal distribution.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable is trainable, its gradient
- *     /// will be tracked.
- *     /// The variable uses a float tensor initialized randomly using a
- *     /// normal distribution with the specified mean and standard deviation.
- *     pub fn randn(&self, name: &str, dims: &[i64], mean: f64, stdev: f64) -> Tensor {
- *         self.var(name, dims, Init::Randn { mean, stdev })
- *     }
- *
- *     /// Creates a new variable initialized randomly with uniform distribution.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable is trainable, its gradient
- *     /// will be tracked.
- *     /// The variable uses a float tensor initialized randomly using a
- *     /// uniform distribution between the specified bounds.
- *     pub fn uniform(&self, name: &str, dims: &[i64], lo: f64, up: f64) -> Tensor {
- *         self.var(name, dims, Init::Uniform { lo, up })
- *     }
- *
- *     /// Creates a new variable initialized randomly with kaiming uniform.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable is trainable, its gradient
- *     /// will be tracked.
- *     /// The variable uses a float tensor initialized randomly using a
- *     /// uniform distribution which bounds follow Kaiming initialization.
- *     pub fn kaiming_uniform(&self, name: &str, dims: &[i64]) -> Tensor {
- *         self.var(name, dims, Init::KaimingUniform)
- *     }
- *
- *     /// Creates a new variable initialized by copying an existing tensor.
- *     ///
- *     /// The new variable is named according to the name parameter and
- *     /// has the specified shape. The variable is trainable, its gradient
- *     /// will be tracked.
- *     /// The variable uses a float tensor initialized by copying some
- *     /// given tensor.
- *     pub fn var_copy(&self, name: &str, t: &Tensor) -> Tensor {
- *         let mut v = self.zeros(name, &t.size());
- *         crate::no_grad(|| v.copy_(&t));
- *         v
- *     }
- *
- *     /// Gets the tensor corresponding to a given name if present.
- *     pub fn get(&self, name: &str) -> Option<Tensor> {
- *         let path = self.path(name);
- *         let variables = self.var_store.variables_.lock().unwrap();
- *         variables
- *             .named_variables
- *             .get(&path)
- *             .map(|v| v.shallow_clone())
- *     }
- *
- *     /// Gets the entry corresponding to a given name for in-place manipulation.
- *     pub fn entry<'b>(&'b self, name: &'b str) -> Entry<'b> {
- *         let variables = self.var_store.variables_.lock().unwrap();
- *         Entry {
- *             name,
- *             variables,
- *             path: &self,
- *         }
- *     }
- * }
- *
- * impl<'a> Entry<'a> {
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     ///
- *     /// If this entry name matches the name of a variables stored in the
- *     /// var store, the corresponding tensor is returned. Otherwise a new
- *     /// variable is added to the var-store with the entry name and is
- *     /// initialized according to the init parameter.
- *     pub fn or_var(self, dims: &[i64], init: Init) -> Tensor {
- *         let v = super::init(init, dims, self.path.device());
- *         self.path
- *             .get_or_add_with_lock(self.name, v, true, self.variables)
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_var_copy(self, tensor: &Tensor) -> Tensor {
- *         let mut v = self.or_zeros(&tensor.size());
- *         crate::no_grad(|| v.copy_(&tensor));
- *         v
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_kaiming_uniform(self, dims: &[i64]) -> Tensor {
- *         self.or_var(dims, Init::KaimingUniform)
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_ones(self, dims: &[i64]) -> Tensor {
- *         self.or_var(dims, Init::Const(1.))
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_ones_no_train(self, dims: &[i64]) -> Tensor {
- *         let o = Tensor::ones(dims, (Kind::Float, self.path.device()));
- *         self.path
- *             .get_or_add_with_lock(self.name, o, true, self.variables)
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_randn(self, dims: &[i64], mean: f64, stdev: f64) -> Tensor {
- *         self.or_var(dims, Init::Randn { mean, stdev })
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_randn_standard(self, dims: &[i64]) -> Tensor {
- *         let init = Init::Randn {
- *             mean: 0.,
- *             stdev: 1.,
- *         };
- *         self.or_var(dims, init)
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_uniform(self, dims: &[i64], lo: f64, up: f64) -> Tensor {
- *         self.or_var(dims, Init::Uniform { lo, up })
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_zeros(self, dims: &[i64]) -> Tensor {
- *         self.or_var(dims, Init::Const(0.))
- *     }
- *
- *     /// Returns the existing entry if, otherwise create a new variable.
- *     pub fn or_zeros_no_train(self, dims: &[i64]) -> Tensor {
- *         let z = Tensor::zeros(dims, (Kind::Float, self.path.device()));
- *         self.path
- *             .get_or_add_with_lock(self.name, z, true, self.variables)
- *     }
- * }
- *
- * impl<'a, T> Div<T> for &'a mut Path<'a>
- * where
- *     T: std::string::ToString,
- * {
- *     type Output = Path<'a>;
- *
- *     fn div(self, rhs: T) -> Self::Output {
- *         self.sub(rhs.to_string())
- *     }
- * }
- *
- * impl<'a, T> Div<T> for &'a Path<'a>
- * where
- *     T: std::string::ToString,
- * {
- *     type Output = Path<'a>;
- *
- *     fn div(self, rhs: T) -> Self::Output {
- *         self.sub(rhs.to_string())
- *     }
- * } */
+	return p.add(name, z, false)
+}
+
+// OnesNoTrain create a new variable initialized with ones.
+// The new variable is named according to the name parameter
+// and has the specified shape. The variable will not be trainable
+// so gradients will not be tracked.
+// The variable uses a float tensor initialized with ones.
+func (p *Path) OnesNoTrain(name string, dims []int) ts.Tensor {
+	dt := ts.Float64
+	o := ts.Ones(dt, dims...)
+	return p.add(name, o, false)
+}
+
+// Var creates a new variable
+// The new variable is named according to the name parameter
+// and has the specified shape. The variable is trainable, its
+// gradient will be tracked. The variable uses a float tensor
+// initialized as per the related argument.
+func (p *Path) Var(name string, dims []int, init InitT) ts.Tensor {
+	v := Init(init, dims, p.VarStore.Device())
+
+	return p.add(name, v, true)
+}
+
+// Zeros creates a new variables initialized with zeros
+// The new variables is named after the name parameter
+// and has the specified shape. The variable is trainable
+// its gradient will be tracked.
+// The variable uses a float tensor initialized with zeros
+func (p *Path) Zeros(name string, dims []int) ts.Tensor {
+	// TODO: check to make sure tensor of zero values.
+	return p.Var(name, dims, 0.0)
+}
+
+// Ones creates a new variable initialized with ones.
+// The new variable is named after the name parameter
+// and has the specified shape. The variable is trainable
+// its gradient will be tracked.
+// The variable uses a float tensor initialized with ones.
+func (p *Path) Ones(name string, dims []int) ts.Tensor {
+
+	// TODO: check to make sure tensor of 1 values.
+	return p.Var(name, dims, 1.0)
+}
+
+// Randn creates a new variable initialized randomly with normal distribution
+// The new variable is named after the name parameter and has
+// the specified shape. The variable is trainable, its gradient
+// will be tracked.
+// The variable uses a float tensor initialized randomly using a
+// STANDARD normal distribution.
+func (p *Path) RandnStandard(name string, dims []int) ts.Tensor {
+	init := rand.NormFloat64()
+	return p.Var(name, dims, init)
+}
+
+// Randn create a new variable initialed randomly with normal distribution.
+// The new variable is named after the name parameter and has
+// the specified shape. The variable is trainable, its gradient
+// will be tracked.
+// The variable uses a float tensor initialized randomly using a
+// normal distribution with the specified mean and standard deviation.
+func (p *Path) Randn(name string, dims []int, mean, stdev float64) ts.Tensor {
+	init := rand.NormFloat64()*stdev + mean
+	return p.Var(name, dims, init)
+}
+
+// Uniform creates a new variable initialized randomly with uniform distribution.
+//
+// The new variable is named according to the name parameter and
+// has the specified shape. The variable is trainable, its gradient
+// will be tracked.
+// The variable uses a float tensor initialized randomly using a
+// uniform distribution between the specified bounds.
+func (p *Path) Uniform(name string, dims []int, lo, up float64) ts.Tensor {
+	init := NewUniform(lo, up)
+	return p.Var(name, dims, init)
+}
+
+// KaimingUniform creates a new variable initialized randomly with kaiming uniform.
+//
+// The new variable is named according to the name parameter and
+// has the specified shape. The variable is trainable, its gradient
+// will be tracked.
+// The variable uses a float tensor initialized randomly using a
+// uniform distribution which bounds follow Kaiming initialization.
+func (p *Path) KaimingUniform(name string, dims []int) ts.Tensor {
+	init := KaimingUniform
+
+	return p.Var(name, dims, init)
+}
+
+// VarCopy creates a new variable initialized by copying an existing tensor.
+//
+// The new variable is named according to the name parameter and
+// has the specified shape. The variable is trainable, its gradient
+// will be tracked.
+// The variable uses a float tensor initialized by copying some
+// given tensor.
+func (p *Path) VarCopy(name string, t ts.Tensor) ts.Tensor {
+	v := p.Zeros(name, []int{t.Size()})
+	return v
+}
+
+// Gets the tensor corresponding to a given name if present.
+func (p *Path) Get(name string) (tensor ts.Tensor, ok bool) {
+	p.VarStore.Variables.Mut.Lock()
+	defer p.VarStore.Variables.Mut.Unlock()
+
+	path := p.path(name)
+	variables := p.VarStore.Variables
+
+	tensor, ok = variables.NamedVariables[path]
+	return tensor, ok
+}
+
+// Entry gets the entry corresponding to a given name for in-place manipulation.
+func (p *Path) Entry(name string) Entry {
+	p.VarStore.Variables.Mut.Lock()
+	defer p.VarStore.Variables.Mut.Unlock()
+
+	variables := p.VarStore.Variables
+	return Entry{
+		name,
+		variables,
+		*p,
+	}
+}
+
+// Implement methods for `Entry`
+// ================================

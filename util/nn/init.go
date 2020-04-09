@@ -49,12 +49,13 @@ var internalMaps = map[initEnum]InitT{
 
 // Init initializes a new float tensor with a specified shape, device
 // and initialization value
-func Init(i InitT, dims []int64, device Device) ts.Tensor {
+func Init(i InitT, dims []int, device Device) ts.Tensor {
 
-	switch i {
-	case Float64:
-		return G.Tensor
-	}
+	dt := ts.Of(i.(ts.Dtype))
+	shape := ts.WithShape(dims...)
+	// TODO: init with device
+
+	return ts.New(dt, shape)
 
 }
 
