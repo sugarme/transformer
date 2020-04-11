@@ -1,46 +1,74 @@
 package nn
 
 import (
+	"log"
 	// "github.com/pkg/errors"
+
+	"github.com/sugarme/sermo/util/ann"
+
 	G "gorgonia.org/gorgonia"
-	// "gorgonia.org/tensor"
+	ts "gorgonia.org/tensor"
 )
 
-// Layer represents a neural network layer.
-// λ
-type Layer interface {
-	// σ - The weights are the "free variables" of a function
-	Model() G.Nodes
-
-	// Fwd represents the forward application of inputs
-	// x.t
-	Fwd(x G.Input) G.Result
-
-	// meta stuff. This stuff is just placholder for more advanced things coming
-
-	Term
-
-	Type() hm.Type
-
-	Shape() tensor.Shape
-
-	// Serialization stuff
-
-	// Describe returns the protobuf definition of a Layer that conforms to the ONNX standard
-	Describe() // some protobuf things TODO
+type LayerNormConfig struct {
+	CudnnEnable       bool
+	Eps               float64
+	ElementWiseAffine bool
+	WsInit            InitT
+	BsInit            InitT
 }
 
-// TODO: implement it
-// See https://github.com/gorgonia/golgi/blob/master/norm.go
-type LayerNorm struct{}
-
-var (
-	_ Layer = (*layerNorm)(nil)
-)
-
-// layerNorm performs layer normalization as per https://arxiv.org/abs/1607.06450
-type layerNorm struct {
-	FC
-	epsNode *G.Node
-	eps     float64
+func DefaultLayerNormConfig() *LayerNormConfig {
+	return &LayerNormConfig{
+		CudnnEnable:       true,
+		Eps:               1e-5,
+		ElementWiseAffine: true,
+		WsInit:            1.0,
+		BsInit:            0.0,
+	}
 }
+
+// LayerNorm is a layer normalization layer
+type LayerNorm struct {
+	Config          *LayerNormConfig
+	Ws              ts.Tensor // weight
+	Bs              ts.Tensor // bias
+	NormalizedShape []int
+}
+
+// NewLayerNorm creates a layer normalization layer
+func NewLayerNorm(path Path, normalizedShape []int, config *LayerNormConfig) *LayerNorm {
+	var ws, bs ts.Tensor
+	switch {
+	case config.ElementWiseAffine == true:
+		ws = path.Var("weight", normalizedShape, config.WsInit)
+		bs = path.Var("bias", normalizedShape, config.BsInit)
+	case config.ElementWiseAffine == false:
+		ws = nil
+	}
+
+	return &LayerNorm{config, ws, bs, normalizedShape}
+
+}
+
+func (ln *LayerNorm) Forward(a G.Input) G.Result {
+
+	norm, err := ann.ConsLayerNorm(a, ann.WithName("Norm"), ann.WithEps(ln.Config.Eps))
+	if err != nil {
+		log.Fatal("Cannot construct layer normalization layer.")
+	}
+
+	return norm.Fwd(a)
+
+}
+
+/* fn forward(&self, xs: &Tensor) -> Tensor {
+ *     Tensor::layer_norm(
+ *         xs,
+ *         self.normalized_shape.as_slice(),
+ *         self.ws.as_ref(),
+ *         self.bs.as_ref(),
+ *         self.config.eps,
+ *         self.config.cudnn_enabled,
+ *     )
+ * } */

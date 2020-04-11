@@ -10,7 +10,7 @@ type BertConfig struct {
 	HiddenAct                 common.Activation
 	AttentionProbsDropoutProb float64
 	HiddenDropoutProb         float64
-	HiddenSize                int64
+	HiddenSize                int
 	InitializerRnage          float32
 	IntermediateSize          int64
 	MaxPositionEmbeddings     int64
@@ -35,8 +35,8 @@ type BertConfig struct {
 // `IsDecoder`: whether model is used as a decoder. If set to `true`
 // a casual mask will be applied to hide future positions that should be attended to.
 type BertModel struct {
-	Embeddings BertEmbedding
-	Encoder    BertEncoder
+	Embeddings *BertEmbedding
+	Encoder    *BertEncoder
 	Pooler     bool
 	IsDecoder  bool
 }

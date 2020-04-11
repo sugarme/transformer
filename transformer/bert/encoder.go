@@ -18,8 +18,8 @@ type BertLayer struct {
 	Attention      BertAttention
 	IsDecoder      bool
 	CrossAttention BertAttention
-	Intermediate   BertIntermediate
-	Output         BertOutput
+	// Intermediate   *BertIntermediate
+	// Output         *BertOutput
 }
 
 // BertPooler defines a linear layer which can be applied to the

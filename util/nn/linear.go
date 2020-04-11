@@ -5,8 +5,8 @@ import (
 )
 
 type Linear struct {
-	Ws *G.Tensor
-	Bs *G.Tensor
+	Ws *G.Tensor // weights
+	Bs *G.Tensor // Bias
 }
 
 /* //! A linear fully-connected layer.

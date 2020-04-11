@@ -3,6 +3,6 @@ package nn
 type Device int
 
 const (
-	cpu Device = iota
-	gpu
+	CPU Device = iota
+	GPU
 )

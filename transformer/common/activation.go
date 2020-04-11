@@ -8,10 +8,10 @@ import G "gorgonia.org/gorgonia"
 // Note: This may become an interface once we've worked through all the linter errors
 type ActivationFunction func(*G.Node) (*G.Node, error)
 
-type activation int
+type Activation int
 
 const (
-	identity activation = iota
+	identity Activation = iota
 	sigmoid
 	tanh
 	relu
@@ -23,7 +23,7 @@ const (
 
 var maxact = cube
 
-var internalmaps = map[activation]ActivationFunction{
+var internalmaps = map[Activation]ActivationFunction{
 	identity:  nil,
 	sigmoid:   G.Sigmoid,
 	tanh:      G.Tanh,

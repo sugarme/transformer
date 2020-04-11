@@ -115,7 +115,7 @@ func (vs *VarStore) GetVariables() map[string]ts.Tensor {
 // with "/" to create sub-paths.
 func (vs *VarStore) Root() Path {
 	return Path{
-		Path:     []string{},
+		Path:     nil,
 		VarStore: *vs,
 	}
 }
@@ -282,7 +282,17 @@ func (p *Path) path(name string) string {
 		return name
 	}
 
+	switch {
+	case len(p.Path) == 0:
+		return name
+	case len(p.Path) == 1:
+		return p.Path[0]
+	case len(p.Path) > 1:
+		return fmt.Sprintf("%v%v%v", strings.Join(p.Path, SEP), SEP, name)
+	}
+
 	return fmt.Sprintf("%v%v%v", strings.Join(p.Path, SEP), SEP, name)
+
 }
 
 func (p *Path) add(name string, tensor ts.Tensor, trainable bool) ts.Tensor {
@@ -309,18 +319,56 @@ func (p *Path) add(name string, tensor ts.Tensor, trainable bool) ts.Tensor {
 }
 
 func (p *Path) getOrAddWithLock(name string, tensor ts.Tensor, trainable bool, variables Variables) ts.Tensor {
+	variables.Mut.Lock()
+	variables.Mut.Unlock()
 
-	// TODO: Implement
+	path := p.path(name)
+	if t, ok := variables.NamedVariables[path]; ok {
+		return t
+	}
 
-	// return ts.New()
+	if trainable {
+		// TODO: Set qruires grad
+		// tensor.set_requires_grad(true)
+		variables.TrainableVariables = append(variables.TrainableVariables, tensor)
+		variables.NamedVariables[path] = tensor
+	}
+
 	return tensor
 }
+
+/*     fn get_or_add_with_lock(
+ *         &self,
+ *         name: &str,
+ *         tensor: Tensor,
+ *         trainable: bool,
+ *         mut variables: MutexGuard<Variables>,
+ *     ) -> Tensor {
+ *         let path = self.path(name);
+ *         if let Some(var) = variables.named_variables.get(&path) {
+ *             return var.shallow_clone();
+ *         }
+ *
+ *         let tensor = if trainable {
+ *             tensor.set_requires_grad(true)
+ *         } else {
+ *             tensor
+ *         };
+ *         if trainable {
+ *             variables.trainable_variables.push(tensor.shallow_clone());
+ *         }
+ *         variables
+ *             .named_variables
+ *             .insert(path, tensor.shallow_clone());
+ *         tensor
+ *     }
+ *  */
 
 // ZerosNoTrain creates a new variable initialized with zeroes.
 // The new variable is named according to the name parameter
 // and has the specified shape. The variable will not be trainable
 // so gradients will not be tracked.
-func (p *Path) ZerosNoTrain(name string, dims []int64) ts.Tensor {
+func (p *Path) ZerosNoTrain(name string, dims []int) ts.Tensor {
 
 	// TODO: implement tensor
 	z := ts.New()
@@ -357,7 +405,7 @@ func (p *Path) Var(name string, dims []int, init InitT) ts.Tensor {
 // The variable uses a float tensor initialized with zeros
 func (p *Path) Zeros(name string, dims []int) ts.Tensor {
 	// TODO: check to make sure tensor of zero values.
-	return p.Var(name, dims, 0.0)
+	return p.Var(name, dims, InitFloat64(0.0))
 }
 
 // Ones creates a new variable initialized with ones.
@@ -401,7 +449,7 @@ func (p *Path) Randn(name string, dims []int, mean, stdev float64) ts.Tensor {
 // The variable uses a float tensor initialized randomly using a
 // uniform distribution between the specified bounds.
 func (p *Path) Uniform(name string, dims []int, lo, up float64) ts.Tensor {
-	init := NewUniform(lo, up)
+	init := InitUniform(lo, up)
 	return p.Var(name, dims, init)
 }
 
@@ -413,7 +461,7 @@ func (p *Path) Uniform(name string, dims []int, lo, up float64) ts.Tensor {
 // The variable uses a float tensor initialized randomly using a
 // uniform distribution which bounds follow Kaiming initialization.
 func (p *Path) KaimingUniform(name string, dims []int) ts.Tensor {
-	init := KaimingUniform
+	init := NewKaimingUniform(dims)
 
 	return p.Var(name, dims, init)
 }
@@ -484,7 +532,7 @@ func (e *Entry) OrZeros(dims []int) ts.Tensor {
 
 // OrKaimingUniform returns the existing entry if, otherwise create a new variable.
 func (e *Entry) OrKaimingUniform(dims []int) ts.Tensor {
-	return e.OrVar(dims, KaimingUniform)
+	return e.OrVar(dims, NewKaimingUniform(dims))
 }
 
 // OrOnes returns the existing entry if, otherwise create a new variable.
@@ -518,7 +566,7 @@ func (e *Entry) OrRandnStandard(dims []int) ts.Tensor {
 
 // OrUniform returns the existing entry if, otherwise create a new variable.
 func (e *Entry) OrUniform(dims []int, lo, up float64) ts.Tensor {
-	init := NewUniform(lo, up)
+	init := InitUniform(lo, up)
 	return e.OrVar(dims, init)
 }
 
