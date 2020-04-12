@@ -4,6 +4,7 @@
 
 input/
 example/gorgonia/testdata/
+example/testdata/
 *.dat
 *.log
 
