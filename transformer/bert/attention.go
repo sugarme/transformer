@@ -5,6 +5,9 @@ import (
 	"github.com/sugarme/sermo/util/nn"
 )
 
+// BertSelfAttention:
+//===================
+
 type BertSelfAttention struct {
 	NumAttentionHeads int64
 	AttentionHeadSize int64
@@ -15,11 +18,17 @@ type BertSelfAttention struct {
 	Value             *nn.Linear
 }
 
+// BertSelfOutput:
+//================
+
 type BertSelfOutput struct {
 	Linear    *nn.Linear
 	LayerNorm *nn.LayerNorm
 	Droput    *common.Dropout
 }
+
+// BertAttention:
+//===============
 
 type BertAttention struct {
 	self   *BertSelfAttention

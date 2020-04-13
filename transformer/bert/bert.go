@@ -36,7 +36,7 @@ type BertConfig struct {
 // `IsDecoder`: whether model is used as a decoder. If set to `true`
 // a casual mask will be applied to hide future positions that should be attended to.
 type BertModel struct {
-	Embeddings *BertEmbedding
+	Embeddings *BertEmbeddings
 	Encoder    *BertEncoder
 	Pooler     bool
 	IsDecoder  bool
@@ -51,26 +51,18 @@ type BertModel struct {
 // let p = nn::VarStore::new(device);
 // let config = BertConfig::from_file(config_path);
 // let bert: BertModel<BertEmbeddings> = BertModel::new(&(&p.root() / "bert"), &config);
-func NewBertModel(p nn.Path, config BertConfig) (*BertModel, error) {
+func NewBertModel(p nn.Path, config *BertConfig) *BertModel {
 	isDecoder := false
 	if config.IsDecoder {
 		isDecoder = true
 	}
 
-	embeddings, err := &NewBertEmbedding(p.Sub("embeddings"), config)
-	if err != nil {
-		return nil, err
-	}
+	embeddings := NewBertEmbedding(p.Sub("embeddings"), config)
 
-	encoder, err := &NewBertEncoder(p.Sub("encoder"), config)
-	if err != nil {
-		return nil, err
-	}
+	encoder := NewBertEncoder(p.Sub("encoder"), config)
 
-	pooler, err := &NewBertPooler(p.Sub("pooler"), config)
-	if err != nil {
-		return nil, err
-	}
+	pooler := NewBertPooler(p.Sub("pooler"), config)
+	bertModel := BertModel{embeddings, encoder, pooler, isDecoder}
 
-	return &BertModel{embeddings, encoder, pooler, isDecoder}, nil
+	return &bertModel
 }

@@ -20,7 +20,7 @@ func InitFloat64(f float64) float64 {
 }
 
 // InitUniform returns a []float64 drawn from a uniform distribution between [low, high) that is provided
-func InitUniform(low, high float64, s ...int) []float64 {
+func NewUniform(low, high float64, s ...int) []float64 {
 	size := ts.Shape(s).TotalSize()
 
 	rand := rng.NewUniformGenerator(time.Now().UnixNano())
@@ -36,7 +36,7 @@ func NewKaimingUniform(dims []int) []float64 {
 	fanIn := factorial(uint64(len(dims) - 1))
 	bound := math.Sqrt(1.0 / float64(fanIn))
 
-	return InitUniform(-bound, bound)
+	return NewUniform(-bound, bound)
 
 }
 

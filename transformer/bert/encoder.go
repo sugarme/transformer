@@ -168,3 +168,32 @@ func (be *BertEncoder) Forward(hiddenState *ts.Tensor, train bool, opts ...Tenso
 type BertPooler struct {
 	Lin nn.Linear
 }
+
+func NewBertPool(p nn.Path, config *BertConfig) *BertPooler {
+
+	path := p.Sub("dense")
+	lin := nn.NewLinear(path, config.HiddenSize, config.HiddenSize)
+
+	return &BertPooler{lin}
+}
+
+func (bp *BertPooler) Forward(hiddenStatus *ts.Tensor) *ts.Tensor {
+
+	// TODO: implement it
+	var res ts.Tensor
+
+	return &res
+
+}
+
+/*     pub fn new(p: &nn::Path, config: &BertConfig) -> BertPooler {
+ *         let lin = nn::linear(&(p / "dense"), config.hidden_size, config.hidden_size, Default::default());
+ *         BertPooler { lin }
+ *     }
+ *
+ *     pub fn forward(&self, hidden_states: &Tensor) -> Tensor {
+ *         hidden_states
+ *             .select(1, 0)
+ *             .apply(&self.lin)
+ *             .tanh()
+ *     } */

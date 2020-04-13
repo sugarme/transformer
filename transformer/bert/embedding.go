@@ -27,7 +27,7 @@ type BertEmbeddings struct {
 // NewBertEmbedding builds a new BertEmbedding
 // * `p` - Variable store path for the root of the BertEmbeddings model
 // * `config` - `BertConfig` object defining the model architecture and vocab/hidden size
-func NewBertEmbedding(p nn.Path, config BertConfig) (*BertEmbeddings, error) {
+func NewBertEmbedding(p nn.Path, config *BertConfig) *BertEmbeddings {
 	embeddingConfig := nn.DefaultEmbeddingConfig()
 	embeddingConfig.PaddingIdx = 0
 
@@ -47,9 +47,9 @@ func NewBertEmbedding(p nn.Path, config BertConfig) (*BertEmbeddings, error) {
 	layerNorm := nn.NewLayerNorm(lnPath, []int{config.HiddenSize}, layerNormConfig)
 
 	dropout := common.NewDropout(config.HiddenDropoutProb)
-	bertEmbedding := &BertEmbeddings{wordEmbeddings, positionEmbeddings, tokenTypeEmbeddings, layerNorm, dropout}
+	bertEmbedding := BertEmbeddings{wordEmbeddings, positionEmbeddings, tokenTypeEmbeddings, layerNorm, dropout}
 
-	return bertEmbedding, nil
+	return &bertEmbedding
 }
 
 // Implement BertEmbedding interface
