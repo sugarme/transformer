@@ -4,7 +4,7 @@ import (
 	"log"
 	"math"
 
-	ts "gorgonia.org/tensor"
+	G "gorgonia.org/gorgonia"
 )
 
 type LinearConfig struct {
@@ -23,8 +23,8 @@ func DefaultLinearConfig() *LinearConfig {
 
 // Linear is a fully connected layer
 type Linear struct {
-	Ws *ts.Tensor // weights
-	Bs *ts.Tensor // Bias
+	Ws *G.Node // weights
+	Bs *G.Node // Bias
 }
 
 func NewLinear(vs Path, inDim, outDim int, config *LinearConfig) *Linear {
@@ -45,16 +45,16 @@ func NewLinear(vs Path, inDim, outDim int, config *LinearConfig) *Linear {
 	}
 }
 
-func (l *Linear) Forward(xs *ts.Tensor) *ts.Tensor {
-	mulRes, err := ts.MatMul(*xs, *l.Ws)
+func (l *Linear) Forward(xs *G.Node) *G.Node {
+	mulRes, err := G.Mul(xs, l.Ws)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	res, err := ts.Add(mulRes, l.Bs)
+	res, err := G.Add(mulRes, l.Bs)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &res
+	return res
 }

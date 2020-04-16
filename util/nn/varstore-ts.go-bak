@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	G "gorgonia.org/gorgonia"
+	ts "gorgonia.org/tensor"
 )
 
 // The separator is used to separate path elements in the tensor names.
@@ -17,8 +17,8 @@ const SEP string = "."
 // When variable store is frozen, trainable is still set to tree.
 // However, the tensor is not set to require gradients.
 type Variables struct {
-	NamedVariables     map[string]*G.Node
-	TrainableVariables []*G.Node
+	NamedVariables     map[string]ts.Tensor
+	TrainableVariables []ts.Tensor
 	Mut                *sync.Mutex
 }
 
@@ -26,9 +26,8 @@ type Variables struct {
 // or multiple layers. It specifies a single device
 // where all variables are stored.
 type VarStore struct {
-	// Variables Variables
-	// device    Device
-	G.ExprGraph
+	Variables Variables
+	device    Device
 }
 
 // Path is a variable store with an associated path
@@ -51,8 +50,8 @@ type Entry struct {
 // NewVarStore create a new variable store on the specified device
 func NewVarStore(device Device) VarStore {
 	variables := Variables{
-		NamedVariables:     make(map[string]*G.Node),
-		TrainableVariables: []*G.Node{},
+		NamedVariables:     make(map[string]ts.Tensor),
+		TrainableVariables: []ts.Tensor{},
 		Mut:                &sync.Mutex{},
 	}
 
@@ -90,7 +89,7 @@ func (vs *VarStore) IsEmpty() bool {
 }
 
 // TrainableVariables returns all trainable variables for this varstore
-func (vs *VarStore) TrainableVariables() []*G.Node {
+func (vs *VarStore) TrainableVariables() []ts.Tensor {
 	vs.Variables.Mut.Lock()
 	defer vs.Variables.Mut.Unlock()
 
@@ -101,7 +100,7 @@ func (vs *VarStore) TrainableVariables() []*G.Node {
 
 // GetVariables returns all variables currently stores in varstore
 // along with their names.
-func (vs *VarStore) GetVariables() map[string]*G.Node {
+func (vs *VarStore) GetVariables() map[string]ts.Tensor {
 	vs.Variables.Mut.Lock()
 	defer vs.Variables.Mut.Unlock()
 
@@ -130,7 +129,7 @@ func (vs *VarStore) Save(path string) error {
 
 	variables := vs.Variables.NamedVariables
 
-	var namedTensors []*G.Node
+	var namedTensors []ts.Tensor
 
 	for _, t := range variables {
 		namedTensors = append(namedTensors, t)
@@ -296,7 +295,7 @@ func (p *Path) path(name string) string {
 
 }
 
-func (p *Path) add(name string, tensor *G.Node, trainable bool) *G.Node {
+func (p *Path) add(name string, tensor ts.Tensor, trainable bool) ts.Tensor {
 	path := p.path(name)
 
 	p.VarStore.Variables.Mut.Lock()
@@ -319,7 +318,7 @@ func (p *Path) add(name string, tensor *G.Node, trainable bool) *G.Node {
 
 }
 
-func (p *Path) getOrAddWithLock(name string, tensor *G.Node, trainable bool, variables Variables) *G.Node {
+func (p *Path) getOrAddWithLock(name string, tensor ts.Tensor, trainable bool, variables Variables) ts.Tensor {
 	variables.Mut.Lock()
 	variables.Mut.Unlock()
 
@@ -369,7 +368,7 @@ func (p *Path) getOrAddWithLock(name string, tensor *G.Node, trainable bool, var
 // The new variable is named according to the name parameter
 // and has the specified shape. The variable will not be trainable
 // so gradients will not be tracked.
-func (p *Path) ZerosNoTrain(name string, dims []int) *G.Node {
+func (p *Path) ZerosNoTrain(name string, dims []int) ts.Tensor {
 
 	// TODO: implement tensor
 	z := ts.New()
@@ -382,7 +381,7 @@ func (p *Path) ZerosNoTrain(name string, dims []int) *G.Node {
 // and has the specified shape. The variable will not be trainable
 // so gradients will not be tracked.
 // The variable uses a float tensor initialized with ones.
-func (p *Path) OnesNoTrain(name string, dims []int) *G.Node {
+func (p *Path) OnesNoTrain(name string, dims []int) ts.Tensor {
 	dt := ts.Float64
 	o := ts.Ones(dt, dims...)
 	return p.add(name, o, false)
@@ -393,7 +392,7 @@ func (p *Path) OnesNoTrain(name string, dims []int) *G.Node {
 // and has the specified shape. The variable is trainable, its
 // gradient will be tracked. The variable uses a float tensor
 // initialized as per the related argument.
-func (p *Path) Var(name string, dims []int, init InitT) *G.Node {
+func (p *Path) Var(name string, dims []int, init InitT) ts.Tensor {
 	v := Init(init, dims, p.VarStore.Device())
 
 	return p.add(name, v, true)
@@ -404,7 +403,7 @@ func (p *Path) Var(name string, dims []int, init InitT) *G.Node {
 // and has the specified shape. The variable is trainable
 // its gradient will be tracked.
 // The variable uses a float tensor initialized with zeros
-func (p *Path) Zeros(name string, dims []int) *G.Node {
+func (p *Path) Zeros(name string, dims []int) ts.Tensor {
 	// TODO: check to make sure tensor of zero values.
 	return p.Var(name, dims, InitFloat64(0.0))
 }
@@ -414,7 +413,7 @@ func (p *Path) Zeros(name string, dims []int) *G.Node {
 // and has the specified shape. The variable is trainable
 // its gradient will be tracked.
 // The variable uses a float tensor initialized with ones.
-func (p *Path) Ones(name string, dims []int) *G.Node {
+func (p *Path) Ones(name string, dims []int) ts.Tensor {
 
 	// TODO: check to make sure tensor of 1 values.
 	return p.Var(name, dims, 1.0)
@@ -426,7 +425,7 @@ func (p *Path) Ones(name string, dims []int) *G.Node {
 // will be tracked.
 // The variable uses a float tensor initialized randomly using a
 // STANDARD normal distribution.
-func (p *Path) RandnStandard(name string, dims []int) *G.Node {
+func (p *Path) RandnStandard(name string, dims []int) ts.Tensor {
 	init := rand.NormFloat64()
 	return p.Var(name, dims, init)
 }
@@ -437,7 +436,7 @@ func (p *Path) RandnStandard(name string, dims []int) *G.Node {
 // will be tracked.
 // The variable uses a float tensor initialized randomly using a
 // normal distribution with the specified mean and standard deviation.
-func (p *Path) Randn(name string, dims []int, mean, stdev float64) *G.Node {
+func (p *Path) Randn(name string, dims []int, mean, stdev float64) ts.Tensor {
 	init := rand.NormFloat64()*stdev + mean
 	return p.Var(name, dims, init)
 }
@@ -449,7 +448,7 @@ func (p *Path) Randn(name string, dims []int, mean, stdev float64) *G.Node {
 // will be tracked.
 // The variable uses a float tensor initialized randomly using a
 // uniform distribution between the specified bounds.
-func (p *Path) Uniform(name string, dims []int, lo, up float64) *G.Node {
+func (p *Path) Uniform(name string, dims []int, lo, up float64) ts.Tensor {
 	init := NewUniform(lo, up)
 	return p.Var(name, dims, init)
 }
@@ -461,7 +460,7 @@ func (p *Path) Uniform(name string, dims []int, lo, up float64) *G.Node {
 // will be tracked.
 // The variable uses a float tensor initialized randomly using a
 // uniform distribution which bounds follow Kaiming initialization.
-func (p *Path) KaimingUniform(name string, dims []int) *G.Node {
+func (p *Path) KaimingUniform(name string, dims []int) ts.Tensor {
 	init := NewKaimingUniform(dims)
 
 	return p.Var(name, dims, init)
@@ -474,13 +473,13 @@ func (p *Path) KaimingUniform(name string, dims []int) *G.Node {
 // will be tracked.
 // The variable uses a float tensor initialized by copying some
 // given tensor.
-func (p *Path) VarCopy(name string, t *G.Node) *G.Node {
+func (p *Path) VarCopy(name string, t ts.Tensor) ts.Tensor {
 	v := p.Zeros(name, []int{t.Size()})
 	return v
 }
 
 // Gets the tensor corresponding to a given name if present.
-func (p *Path) Get(name string) (tensor *G.Node, ok bool) {
+func (p *Path) Get(name string) (tensor ts.Tensor, ok bool) {
 	p.VarStore.Variables.Mut.Lock()
 	defer p.VarStore.Variables.Mut.Unlock()
 
@@ -513,7 +512,7 @@ func (p *Path) Entry(name string) Entry {
 // var store, the corresponding tensor is returned. Otherwise a new
 // variable is added to the var-store with the entry name and is
 // initialized according to the init parameter.
-func (e *Entry) OrVar(dims []int, init InitT) *G.Node {
+func (e *Entry) OrVar(dims []int, init InitT) ts.Tensor {
 	v := Init(init, dims, e.Path.Device())
 	path := e.Path
 
@@ -521,28 +520,28 @@ func (e *Entry) OrVar(dims []int, init InitT) *G.Node {
 }
 
 // OrVarCopy returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrVarCopy(tensor *G.Node) *G.Node {
+func (e *Entry) OrVarCopy(tensor ts.Tensor) ts.Tensor {
 	v := e.OrZeros([]int{tensor.Size()})
 	return v
 }
 
 // Returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrZeros(dims []int) *G.Node {
+func (e *Entry) OrZeros(dims []int) ts.Tensor {
 	return e.OrVar(dims, 0.0)
 }
 
 // OrKaimingUniform returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrKaimingUniform(dims []int) *G.Node {
+func (e *Entry) OrKaimingUniform(dims []int) ts.Tensor {
 	return e.OrVar(dims, NewKaimingUniform(dims))
 }
 
 // OrOnes returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrOnes(dims []int) *G.Node {
+func (e *Entry) OrOnes(dims []int) ts.Tensor {
 	return e.OrVar(dims, 1.0)
 }
 
 // OrOnesNoTrain returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrOnesNoTrain(dims []int) *G.Node {
+func (e *Entry) OrOnesNoTrain(dims []int) ts.Tensor {
 
 	shape := ts.WithShape(dims...)
 
@@ -554,28 +553,28 @@ func (e *Entry) OrOnesNoTrain(dims []int) *G.Node {
 }
 
 // OrRandn returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrRandn(dims []int, mean, stdev float64) *G.Node {
+func (e *Entry) OrRandn(dims []int, mean, stdev float64) ts.Tensor {
 	init := rand.NormFloat64()*stdev + mean
 	return e.OrVar(dims, init)
 }
 
 // OrRandnStandard returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrRandnStandard(dims []int) *G.Node {
+func (e *Entry) OrRandnStandard(dims []int) ts.Tensor {
 	init := rand.NormFloat64()
 	return e.OrVar(dims, init)
 }
 
 // OrUniform returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrUniform(dims []int, lo, up float64) *G.Node {
+func (e *Entry) OrUniform(dims []int, lo, up float64) ts.Tensor {
 	init := NewUniform(lo, up)
 	return e.OrVar(dims, init)
 }
 
 // OrZerosNoTrain returns the existing entry if, otherwise create a new variable.
-func (e *Entry) OrZerosNoTrain(dims []int) *G.Node {
+func (e *Entry) OrZerosNoTrain(dims []int) ts.Tensor {
 
-	shape := G.WithShape(dims...)
-	z := G.NewTensor(e.Graph, G.Float64, shape)
+	shape := ts.WithShape(dims...)
+	z := ts.New(shape)
 
 	return e.Path.getOrAddWithLock(e.Name, z, true, e.Variables)
 }

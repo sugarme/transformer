@@ -3,13 +3,17 @@ module github.com/sugarme/sermo
 go 1.13
 
 require (
+	github.com/awalterschulze/gographviz v2.0.1+incompatible // indirect
 	github.com/cheggaaa/pb/v3 v3.0.4
 	github.com/chewxy/hm v1.0.0
 	github.com/emirpasic/gods v1.12.0
+	github.com/gogo/protobuf v1.3.1 // indirect
+	github.com/golang/protobuf v1.4.0 // indirect
 	github.com/gonum/blas v0.0.0-20181208220705-f22b278b28ac
 	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82 // indirect
 	github.com/gonum/internal v0.0.0-20181124074243-f884aa714029 // indirect
-	github.com/leesper/go_rng v0.0.0-20171009123644-5344a9259b21
+	github.com/google/flatbuffers v1.12.0 // indirect
+	github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353
 	github.com/pkg/errors v0.9.1
 	github.com/rivo/uniseg v0.1.0
 	github.com/schollz/progressbar/v2 v2.15.0
