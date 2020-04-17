@@ -52,7 +52,7 @@ func NewLayerNorm(path Path, normalizedShape []int, config *LayerNormConfig) *La
 }
 
 // TODO: use ts.Tensor??
-func (ln *LayerNorm) Forward(a G.Input) G.Result {
+func (ln *LayerNorm) Forward(a G.Input) *G.Node {
 
 	norm, err := ann.ConsLayerNorm(a, ann.WithName("Norm"), ann.WithEps(ln.Config.Eps))
 	if err != nil {

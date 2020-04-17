@@ -1,7 +1,9 @@
 package common
 
 import (
-// ts "gorgonia.org/tensor"
+	"log"
+
+	G "gorgonia.org/gorgonia"
 )
 
 type Dropout struct {
@@ -14,12 +16,18 @@ func NewDropout(p float64) *Dropout {
 	}
 }
 
-// func (d *Dropout) ForwardT(input ts.Tensor, train bool) ts.Tensor {
-// return input.Dropout(d.dropoutProb, train)
-// }
+func (d *Dropout) ForwardT(input *G.Node, train bool) *G.Node {
 
-/* impl ModuleT for Dropout {
- *     fn forward_t(&self, input: &Tensor, train: bool) -> Tensor {
- *         input.dropout(self.dropout_prob, train)
- *     }
- * } */
+	return d.dropout(input, d.dropoutProb, train)
+}
+
+func (d *Dropout) dropout(input *G.Node, prob float64, train bool) *G.Node {
+
+	// TODO: implement *trainable* with `train` parameter
+	res, err := G.Dropout(input, prob)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return res
+}

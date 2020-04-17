@@ -3,6 +3,7 @@ module github.com/sugarme/sermo
 go 1.13
 
 require (
+	github.com/aunum/log v0.0.0-20200321163253-24c356e939b0
 	github.com/awalterschulze/gographviz v2.0.1+incompatible // indirect
 	github.com/cheggaaa/pb/v3 v3.0.4
 	github.com/chewxy/hm v1.0.0

@@ -7,7 +7,6 @@ import (
 	"github.com/sugarme/sermo/util/nn"
 
 	G "gorgonia.org/gorgonia"
-	ts "gorgonia.org/tensor"
 )
 
 // BertSelfAttention:
@@ -24,7 +23,7 @@ type BertSelfAttention struct {
 }
 
 // NewBertSelfAttention creates a new `BertSelfAttention`
-func NewBertSelfAttention(p nn.Path, config BertConfig) *BertSelfAttention {
+func NewBertSelfAttention(p nn.Path, config *BertConfig) *BertSelfAttention {
 	if config.HiddenSize%int(config.NumAttentionHeads) != 0 {
 		log.Fatal("Hidden size is not a multiple of the number of attention heads.")
 	}
@@ -150,10 +149,100 @@ type BertSelfOutput struct {
 	Droput    *common.Dropout
 }
 
+func NewBertSelfOutput(p nn.Path, config *BertConfig) *BertSelfOutput {
+
+	path := p.Sub("dense")
+	lconfig := nn.DefaultLinearConfig()
+	linear := nn.NewLinear(path, config.HiddenSize, config.HiddenSize, lconfig)
+
+	layerNormConfig := nn.DefaultLayerNormConfig()
+	layerNormConfig.Eps = 1e-12
+
+	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int{config.HiddenSize}, layerNormConfig)
+	dropout := NewDropout(config.HiddenDropoutProb)
+
+	return &BertSelfOutput{linear, layerNorm, dropout}
+}
+
+func (bso *BertSelfOutput) ForwardT(hiddenStates *G.Node, inputTensor *G.Node, train bool) *G.Node {
+
+	hiddenState := bso.Linear.Forward(hiddenStates)
+	hiddenState = bso.Droput.ForwardT(hiddenStates, train)
+
+	return hiddenState
+}
+
 // BertAttention:
 //===============
 
 type BertAttention struct {
 	self   *BertSelfAttention
-	Output *BertSelfOutput
+	output *BertSelfOutput
+}
+
+func NewBertAttention(p nn.Path, config *BertConfig) *BertAttention {
+	self := NewBertSelfAttention(p.Sub("self"), config)
+	output := NewBertSelfOutput(p.Sub("output"), config)
+
+	return &BertAttention{self, output}
+}
+
+func (ba *BertAttention) ForwardT(hiddenStates *G.Node, mask, encoderHiddenStates, encoderMask *G.Node, train bool) (retVal, RetValOpt *G.Node, err error) {
+	selfOutput, attentionWeights, err := ba.self.ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask, train)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	selfOutput = ba.output.ForwardT(selfOutput, hiddenStates, train)
+
+	return selfOutput, attentionWeights, nil
+}
+
+// BertIntermedate:
+//=================
+
+type BertIntermediate struct {
+	lin        *nn.Linear
+	activation common.ActivationFn
+}
+
+func NewBertIntermediate(p nn.Path, config *BertConfig) *BertIntermediate {
+	lconfig := nn.DefaultLinearConfig()
+	lin := nn.NewLinear(p.Sub("dense"), config.HiddenSize, int(config.IntermediateSize), lconfig)
+
+	return &BertIntermediate{lin, config.HiddenAct}
+}
+
+// BertOutput:
+//============
+
+type BertOutput struct {
+	lin       *nn.Linear
+	layerNorm *nn.LayerNorm
+	dropout   *common.Dropout
+}
+
+func NewBertOutput(p nn.Path, config *BertConfig) *BertOutput {
+	lconfig := nn.DefaultLinearConfig()
+	lin := nn.NewLinear(p.Sub("dense"), int(config.IntermediateSize), config.HiddenSize, lconfig)
+
+	layerNormConfig := nn.DefaultLayerNormConfig()
+	layerNormConfig.Eps = 1e-12
+	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int{config.HiddenSize}, layerNormConfig)
+
+	dropout := common.NewDropout(config.HiddenDropoutProb)
+
+	return &BertOutput{lin, layerNorm, dropout}
+}
+
+func (bo *BertOutput) ForwardT(hiddenStates, inputTensor *G.Node, train bool) *G.Node {
+
+	hiddenState := bo.lin.Forward(hiddenStates)
+	hiddenState = bo.dropout.ForwardT(hiddenState, train)
+
+	hiddenState = G.Must(G.Add(inputTensor, hiddenState))
+
+	hiddenState = bo.layerNorm.Forward(hiddenState)
+
+	return hiddenState
 }
