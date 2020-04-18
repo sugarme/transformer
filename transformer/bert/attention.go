@@ -159,7 +159,7 @@ func NewBertSelfOutput(p nn.Path, config *BertConfig) *BertSelfOutput {
 	layerNormConfig.Eps = 1e-12
 
 	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int{config.HiddenSize}, layerNormConfig)
-	dropout := NewDropout(config.HiddenDropoutProb)
+	dropout := common.NewDropout(config.HiddenDropoutProb)
 
 	return &BertSelfOutput{linear, layerNorm, dropout}
 }
@@ -211,6 +211,17 @@ func NewBertIntermediate(p nn.Path, config *BertConfig) *BertIntermediate {
 	lin := nn.NewLinear(p.Sub("dense"), config.HiddenSize, int(config.IntermediateSize), lconfig)
 
 	return &BertIntermediate{lin, config.HiddenAct}
+}
+
+func (bi *BertIntermediate) Forward(hiddenStates *G.Node) *G.Node {
+	hiddenState := bi.lin.Forward(hiddenStates)
+
+	retVal, err := bi.activation.Fwd(hiddenState)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return retVal
 }
 
 // BertOutput:

@@ -1,13 +1,12 @@
 package bert
 
 import (
-	"reflect"
-	"runtime"
+	"log"
+
+	G "gorgonia.org/gorgonia"
+	ts "gorgonia.org/tensor"
 
 	"github.com/sugarme/sermo/util/nn"
-
-	ts "gorgonia.org/tensor"
-	// G "gorgonia.org/gorgonia"
 )
 
 // `BertLayer`:
@@ -44,43 +43,30 @@ func NewBertLayer(p nn.Path, config *BertConfig) *BertLayer {
 	return &BertLayer{attention, isDecoder, crossAttention, intermediate, output}
 }
 
-func (bl *BertLayer) ForwardT(hiddenState *ts.Tensor, train bool, opts ...TensorOpt) (*ts.Tensor, []*ts.Tensor, []*ts.Tensor) {
+func (bl *BertLayer) ForwardT(hiddenState *G.Node, mask, encoderHiddenStates, encoderMask *G.Node, train bool) (*G.Node, *G.Node, *G.Node, error) {
 	var (
-		mask, encoderHiddenStates, encoderMask *ts.Tensor
-		attentionOuput                         *ts.Tensor
-		attentionWeights                       []*ts.Tensor
-		crossAttentionWeights                  []*ts.Tensor
+		attentionOuput        *G.Node
+		attentionWeights      *G.Node
+		crossAttentionWeights *G.Node
+		err                   error
 	)
 
-	for _, o := range opts {
-		switch {
-		case runtime.FuncForPC(reflect.ValueOf(o).Pointer()).Name() == "MaskOpt":
-			mask = o()
-		case runtime.FuncForPC(reflect.ValueOf(o).Pointer()).Name() == "EncoderHiddenStateOpt":
-			encoderHiddenStates = o()
-		case runtime.FuncForPC(reflect.ValueOf(o).Pointer()).Name() == "EncoderMaskOpt":
-			encoderMask = o()
+	attentionOuput, attentionWeights, err = bl.Attention.ForwardT(hiddenState, mask, nil, nil, train)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if bl.IsDecoder && encoderHiddenStates != nil {
+		attentionOuput, attentionWeights, err = bl.Attention.ForwardT(hiddenState, mask, nil, nil, train)
+		attentionOuput, crossAttentionWeights, err = bl.CrossAttention.ForwardT(attentionOuput, mask, encoderHiddenStates, encoderMask, train)
+		if err != nil {
+			return nil, nil, nil, err
 		}
 	}
 
-	maskOpt := MaskTensorOpt(mask)
+	output := bl.Intermediate.Forward(attentionOuput)
 
-	if bl.IsDecoder && encoderHiddenStates != nil {
-		attentionOuput, attentionWeights = bl.Attention.ForwardT(hiddenState, train)
-
-		encoderHiddenStatesOpt := EncoderHiddenStateTensorOpt(encoderHiddenStates)
-		encoderMaskOpt := MaskTensorOpt(encoderMask)
-
-		attentionOuput, attentionWeights = bl.Attention.ForwardT(attentionOuput, train, maskOpt)
-		attentionOuput, crossAttentionWeights = bl.CrossAttention.ForwardT(attentionOuput, train, maskOpt, encoderHiddenStatesOpt, encoderMaskOpt)
-
-	} else {
-		attentionOuput, attentionWeights = bl.Attention.ForwardT(hiddenState, train, maskOpt)
-	}
-
-	output := bl.Intermediate.ForwardT(attentionOuput)
-
-	return output, attentionWeights, crossAttentionWeights
+	return output, attentionWeights, crossAttentionWeights, nil
 }
 
 // `BertEncoder`:
@@ -115,29 +101,18 @@ func NewBertEncoder(p nn.Path, config *BertConfig) *BertEncoder {
 }
 
 // Forward ...
-func (be *BertEncoder) Forward(hiddenState *ts.Tensor, train bool, opts ...TensorOpt) (*ts.Tensor, []*ts.Tensor, []*ts.Tensor) {
+func (be *BertEncoder) ForwardT(hiddenState, mask, encoderHiddenStates, encoderMask *G.Node, train bool) (*G.Node, []*G.Node, []*G.Node, error) {
 	var (
-		mask, encoderHiddenStates, encoderMask *ts.Tensor
-		attentionWeights                       *ts.Tensor
-		allHiddenStates, allAttentions         []*ts.Tensor
+		attentionWeights               *G.Node
+		allHiddenStates, allAttentions []*G.Node
+		err                            error
 	)
 
-	for _, o := range opts {
-		switch {
-		case runtime.FuncForPC(reflect.ValueOf(o).Pointer()).Name() == "MaskTensorOpt":
-			mask = o()
-		case runtime.FuncForPC(reflect.ValueOf(o).Pointer()).Name() == "EncoderHiddenStateTensorOpt":
-			encoderHiddenStates = o()
-		case runtime.FuncForPC(reflect.ValueOf(o).Pointer()).Name() == "EncoderMaskTensorOpt":
-			encoderMask = o()
-		}
-	}
-
 	if be.OutputHiddenStates {
-		allHiddenStates = make([]*ts.Tensor, 0) // initialize it
+		allHiddenStates = make([]*G.Node, 0) // initialize it
 	}
 	if be.OutputAttentions {
-		allAttentions = make([]*ts.Tensor, 0)
+		allAttentions = make([]*G.Node, 0)
 	}
 
 	for _, layer := range be.Layers {
@@ -145,19 +120,17 @@ func (be *BertEncoder) Forward(hiddenState *ts.Tensor, train bool, opts ...Tenso
 			allHiddenStates = append(allHiddenStates, hiddenState)
 		}
 
-		maskOpt := MaskTensorOpt(mask)
-		encoderHiddenStatesOpt := EncoderHiddenStateTensorOpt(encoderHiddenStates)
-		encoderMaskOpt := EncoderMaskTensorOpt(encoderMask)
+		hiddenState, attentionWeights, _, err = layer.ForwardT(hiddenState, mask, encoderHiddenStates, encoderMask, train)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 
-		temp := layer.ForwardT(hiddenState, train, maskOpt, encoderHiddenStatesOpt, encoderMaskOpt)
-		hiddenState = temp[0]
-		attentionWeights = temp[1]
 		if allAttentions != nil {
 			allAttentions = append(allAttentions, attentionWeights)
 		}
 	}
 
-	return hiddenState, allHiddenStates, allAttentions
+	return hiddenState, allHiddenStates, allAttentions, nil
 }
 
 // `BertPooler`:
@@ -166,34 +139,28 @@ func (be *BertEncoder) Forward(hiddenState *ts.Tensor, train bool, opts ...Tenso
 // BertPooler defines a linear layer which can be applied to the
 // first element of the sequence(`[MASK]` token)
 type BertPooler struct {
-	Lin nn.Linear
+	Lin *nn.Linear
 }
 
-func NewBertPool(p nn.Path, config *BertConfig) *BertPooler {
-
+func NewBertPooler(p nn.Path, config *BertConfig) *BertPooler {
 	path := p.Sub("dense")
-	lin := nn.NewLinear(path, config.HiddenSize, config.HiddenSize)
+	lconfig := nn.DefaultLinearConfig()
+	lin := nn.NewLinear(path, config.HiddenSize, config.HiddenSize, lconfig)
 
 	return &BertPooler{lin}
 }
 
-func (bp *BertPooler) Forward(hiddenStatus *ts.Tensor) *ts.Tensor {
+func (bp *BertPooler) Forward(hiddenStates *G.Node) *G.Node {
+	// select row 0 (hidden_states.select(1,0))
+	var slice ts.Slice
+	slice = G.S(1)
+	n, err := G.Slice(hiddenStates, slice)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// TODO: implement it
-	var res ts.Tensor
+	hiddenState := bp.Lin.Forward(n)
+	hiddenState, err = G.Tanh(hiddenState)
 
-	return &res
-
+	return hiddenState
 }
-
-/*     pub fn new(p: &nn::Path, config: &BertConfig) -> BertPooler {
- *         let lin = nn::linear(&(p / "dense"), config.hidden_size, config.hidden_size, Default::default());
- *         BertPooler { lin }
- *     }
- *
- *     pub fn forward(&self, hidden_states: &Tensor) -> Tensor {
- *         hidden_states
- *             .select(1, 0)
- *             .apply(&self.lin)
- *             .tanh()
- *     } */

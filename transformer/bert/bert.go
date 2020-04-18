@@ -38,7 +38,7 @@ type BertConfig struct {
 type BertModel struct {
 	Embeddings *BertEmbeddings
 	Encoder    *BertEncoder
-	Pooler     bool
+	Pooler     *BertPooler
 	IsDecoder  bool
 }
 
