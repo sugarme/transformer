@@ -1,3 +1,3 @@
-# SERMO - Natural Language Processing Tool Kit Written In Go
+# Transformer - Natural Language Processing Transformer Written In Go
 
 TODO(TT): update
