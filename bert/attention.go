@@ -173,7 +173,7 @@ func NewBertAttention(p nn.Path, config BertConfig) (retVal BertAttention) {
 	return BertAttention{self, output}
 }
 
-func (ba *BertAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, RetValOpt ts.Tensor) {
+func (ba BertAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, RetValOpt ts.Tensor) {
 
 	selfOutput, attentionWeights := ba.Bsa.ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask, train)
 	selfOutput = ba.Output.ForwardT(selfOutput, hiddenStates, train)
@@ -228,7 +228,7 @@ func NewBertOutput(p nn.Path, config BertConfig) (retVal BertOutput) {
 	return BertOutput{lin, layerNorm, dropout}
 }
 
-func (bo *BertOutput) ForwardT(hiddenStates, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
+func (bo BertOutput) ForwardT(hiddenStates, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
 
 	state1 := hiddenStates.Apply(bo.Lin)
 	state2 := state1.ApplyT(bo.Dropout, train)

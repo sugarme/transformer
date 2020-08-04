@@ -14,7 +14,6 @@ func NewDropout(p float64) Dropout {
 	}
 }
 
-func (d *Dropout) ForwardT(input ts.Tensor, train bool) (retVal ts.Tensor) {
-
+func (d Dropout) ForwardT(input ts.Tensor, train bool) (retVal ts.Tensor) {
 	return ts.MustDropout(input, d.dropoutProb, train)
 }
