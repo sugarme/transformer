@@ -15,7 +15,7 @@ type BertConfig struct {
 	HiddenAct                 common.ActivationFn `json:"hidden_act"`
 	AttentionProbsDropoutProb float64             `json:"attention_probs_dropout_prob"`
 	HiddenDropoutProb         float64             `json:"hidden_dropout_prob"`
-	HiddenSize                int                 `json:"hidden_size"`
+	HiddenSize                int64               `json:"hidden_size"`
 	InitializerRange          float32             `json:"initializer_range"`
 	IntermediateSize          int64               `json:"intermediate_size"`
 	MaxPositionEmbeddings     int64               `json:"max_position_embeddings"`

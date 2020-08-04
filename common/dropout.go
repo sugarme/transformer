@@ -1,33 +1,20 @@
 package common
 
 import (
-	"log"
-
-	"github.com/sugarme/gotch"
+	ts "github.com/sugarme/gotch/tensor"
 )
 
 type Dropout struct {
 	dropoutProb float64
 }
 
-func NewDropout(p float64) *Dropout {
-	return &Dropout{
+func NewDropout(p float64) Dropout {
+	return Dropout{
 		dropoutProb: p,
 	}
 }
 
-func (d *Dropout) ForwardT(input *G.Node, train bool) *G.Node {
+func (d *Dropout) ForwardT(input ts.Tensor, train bool) (retVal ts.Tensor) {
 
-	return d.dropout(input, d.dropoutProb, train)
-}
-
-func (d *Dropout) dropout(input *G.Node, prob float64, train bool) *G.Node {
-
-	// TODO: implement *trainable* with `train` parameter
-	res, err := G.Dropout(input, prob)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return res
+	return ts.MustDropout(input, d.dropoutProb, train)
 }
