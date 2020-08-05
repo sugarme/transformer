@@ -1,8 +1,9 @@
 package bert
 
 import (
-	"errors"
+	"fmt"
 
+	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
 
@@ -40,9 +41,9 @@ type BertConfig struct {
 // `IsDecoder`: whether model is used as a decoder. If set to `true`
 // a casual mask will be applied to hide future positions that should be attended to.
 type BertModel struct {
-	Embeddings *BertEmbeddings
-	Encoder    *BertEncoder
-	Pooler     *BertPooler
+	Embeddings BertEmbeddings
+	Encoder    BertEncoder
+	Pooler     BertPooler
 	IsDecoder  bool
 }
 
@@ -55,55 +56,106 @@ type BertModel struct {
 // let p = nn::VarStore::new(device);
 // let config = BertConfig::from_file(config_path);
 // let bert: BertModel<BertEmbeddings> = BertModel::new(&(&p.root() / "bert"), &config);
-func NewBertModel(p nn.Path, config *BertConfig) *BertModel {
+func NewBertModel(p nn.Path, config BertConfig) (retVal BertModel) {
 	isDecoder := false
 	if config.IsDecoder {
 		isDecoder = true
 	}
 
 	embeddings := NewBertEmbedding(p.Sub("embeddings"), config)
-
 	encoder := NewBertEncoder(p.Sub("encoder"), config)
-
 	pooler := NewBertPooler(p.Sub("pooler"), config)
-	bertModel := BertModel{embeddings, encoder, pooler, isDecoder}
 
-	return &bertModel
+	return BertModel{embeddings, encoder, pooler, isDecoder}
 }
 
-func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask *G.Node, train bool) (*G.Node, *G.Node, *G.Node, []*G.Node, string, error) {
+func (b BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
 
 	var (
-		inputShape ts.Shape
-		device     G.Device
-		err        error
+		inputShape []int64
+		device     gotch.Device
 	)
 
-	if inputIds != nil {
-		if inputEmbeds != nil {
-			err = errors.New("Only one of input ids or input embeddings may be set")
-			return nil, nil, nil, nil, "", err
+	if inputIds.MustDefined() {
+		if inputEmbeds.MustDefined() {
+			err = fmt.Errorf("Only one of input ids or input embeddings may be set\n")
+			return
 		} else {
-			inputShape = inputIds.Shape()
-			device = inputIds.Device()
+			inputShape = inputIds.MustSize()
+			device = inputIds.MustDevice()
 		}
 	} else {
-		if inputEmbeds == nil {
-			err = errors.New("At least one of input ids or input embeddings must be set")
-			return nil, nil, nil, nil, "", err
+		if inputEmbeds.MustDefined() {
+			size := inputEmbeds.MustSize()
+			inputShape = []int64{size[0], size[1]}
+			device = inputEmbeds.MustDevice()
 		} else {
-			// Check this.
-			// Some(embeds) => (vec!(embeds.size()[0], embeds.size()[1]), embeds.device()),
-			inputShape, err = inputEmbeds.Shape().S([]int{0, 1})
-			device = inputEmbeds.Device()
-		}
-
-		if mask == nil {
-			// TODO: create new node
-			// None => Tensor::ones(&input_shape, (Kind::Int64, device))
-			g := G.NewGraph()
-			mask = G.NewTensor(g, G.Float64, inputShape)
+			err = fmt.Errorf("At least one of input ids or input embeddings must be set\n")
+			return
 		}
 	}
 
+	var maskTs ts.Tensor
+	if mask.MustDefined() {
+		maskTs = mask
+	} else {
+		maskTs = ts.MustOnes(inputShape, gotch.Int64, device)
+	}
+
+	var extendedAttentionMask ts.Tensor
+	switch maskTs.Dim() {
+	case 3:
+		extendedAttentionMask = maskTs.MustUnsqueeze(1, false) // TODO: check and delete maskTs if not using later
+	case 2:
+		if b.IsDecoder {
+			seqIds := ts.MustArange(ts.IntScalar(inputShape[1]), gotch.Float, device)
+			causalMaskTmp := seqIds.MustUnsqueeze(0, false).MustUnsqueeze(0, true).MustRepeat([]int64{inputShape[0], inputShape[1], 1}, true)
+			causalMask := causalMaskTmp.MustLe1(seqIds.MustUnsqueeze(0, true).MustUnsqueeze(1, true), true)
+			extendedAttentionMask = causalMask.MustMatmul(mask.MustUnsqueeze(1, false).MustUnsqueeze(1, true), true)
+		} else {
+			extendedAttentionMask = mask.MustUnsqueeze(1, false).MustUnsqueeze(1, true)
+		}
+
+	default:
+		err = fmt.Errorf("Invalid attention mask dimension, must be 2 or 3, got %v\n", maskTs.Dim())
+	}
+
+	extendedAttnMask := extendedAttentionMask.MustOnesLike(false).MustSub(extendedAttentionMask, true).MustMul1(ts.FloatScalar(-10000.0), true)
+
+	// NOTE. encoderExtendedAttentionMask is an optional tensor
+	var encoderExtendedAttentionMask ts.Tensor
+	if b.IsDecoder && encoderHiddenStates.MustDefined() {
+		size := encoderHiddenStates.MustSize()
+		var encoderMaskTs ts.Tensor
+		if encoderMask.MustDefined() {
+			encoderMaskTs = encoderMask
+		} else {
+			encoderMaskTs = ts.MustOnes([]int64{size[0], size[1]}, gotch.Int64, device)
+		}
+
+		switch encoderMaskTs.Dim() {
+		case 2:
+			encoderExtendedAttentionMask = encoderMaskTs.MustUnsqueeze(1, true).MustUnsqueeze(1, true)
+		case 3:
+			encoderExtendedAttentionMask = encoderMaskTs.MustUnsqueeze(1, true)
+		default:
+			err = fmt.Errorf("Invalid encoder attention mask dimension, must be 2, or 3 got %v\n", encoderMaskTs.Dim())
+			return
+		}
+	} else {
+		encoderExtendedAttentionMask = ts.None
+	}
+
+	embeddingOutput, err := b.Embeddings.ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds, train)
+	if err != nil {
+		return
+	}
+
+	hiddenState, allHiddenStates, allAttentions := b.Encoder.ForwardT(embeddingOutput, extendedAttnMask, encoderHiddenStates, encoderExtendedAttentionMask, train)
+
+	pooledOutput := b.Pooler.Forward(hiddenState)
+
+	return hiddenState, pooledOutput, allHiddenStates, allAttentions, nil
 }
+
+// TODO: continue...

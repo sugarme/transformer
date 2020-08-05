@@ -69,8 +69,8 @@ func (bsa *BertSelfAttention) flatten(x ts.Tensor, bs, dimPerHead int64) (retVal
 
 // ForwardT implements ModuleT interface for BertSelfAttention
 //
-// NOTE. use `ts.NewTensor()` for optional params (mask, encoderHiddenStates and
-// encoderMask)
+// NOTE. mask, encoderHiddenStates, encoderMask are  optional tensors
+// for `None` value, `ts.None` can be used.
 func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt ts.Tensor) {
 
 	key := bsa.Key.Forward(hiddenStates)
@@ -113,7 +113,7 @@ func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, 
 
 	if !bsa.OutputAttentions {
 		weights.MustDrop()
-		return context, ts.NewTensor()
+		return context, ts.None
 	} else {
 		return context, weights
 	}

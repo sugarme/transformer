@@ -4,3 +4,5 @@ github.com/sugarme/gotch v0.0.0-20200803054004-4721ffe6701a h1:5hLXqurDC+YY8x9NF
 github.com/sugarme/gotch v0.0.0-20200803054004-4721ffe6701a/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
 github.com/sugarme/gotch v0.0.0-20200804051621-79a0c2e6bf52 h1:2WOfBtFWJoGb6mIy79TZLXkucwnogUlielxhNjFvumQ=
 github.com/sugarme/gotch v0.0.0-20200804051621-79a0c2e6bf52/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
+github.com/sugarme/gotch v0.0.0-20200805003101-282c54f185e4 h1:g9194jGNtFiw3W3rxRPBLOw5hhBLqsKUGxGHsCnrCMg=
+github.com/sugarme/gotch v0.0.0-20200805003101-282c54f185e4/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
