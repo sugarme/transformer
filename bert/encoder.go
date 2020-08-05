@@ -1,6 +1,8 @@
 package bert
 
 import (
+	"fmt"
+
 	ts "github.com/sugarme/gotch/tensor"
 
 	"github.com/sugarme/gotch/nn"
@@ -28,13 +30,13 @@ func NewBertLayer(p nn.Path, config BertConfig) (retVal BertLayer) {
 
 	if config.IsDecoder {
 		isDecoder = true
-		attPath := path.Sub("cross_attention")
+		attPath := p.Sub("cross_attention")
 		crossAttention = NewBertAttention(attPath, config)
 	}
 
-	intermediatePath := path.Sub("intermediate")
+	intermediatePath := p.Sub("intermediate")
 	intermediate := NewBertIntermediate(intermediatePath, config)
-	outputPath := path.Sub("output")
+	outputPath := p.Sub("output")
 	output := NewBertOutput(outputPath, config)
 
 	return BertLayer{attention, isDecoder, crossAttention, intermediate, output}
@@ -54,7 +56,7 @@ func (bl BertLayer) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMas
 		attentionOuputTmp.MustDrop()
 
 	} else {
-		attentionOuput, attentionWeights = bl.Attention.ApplyT(hiddenStates, mask, ts.None, ts.None, train)
+		attentionOuput, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.None, ts.None, train)
 		crossAttentionWeights = ts.None
 	}
 
@@ -90,7 +92,7 @@ func NewBertEncoder(p nn.Path, config BertConfig) (retVal BertEncoder) {
 
 	var layers []BertLayer
 	for lIdx := 0; lIdx < int(config.NumHiddenLayers); lIdx++ {
-		layers = append(layers, NewBertLayer(path.Sub(string(lIdx)), config))
+		layers = append(layers, NewBertLayer(path.Sub(fmt.Sprintf("%v", lIdx)), config))
 	}
 
 	return BertEncoder{outputAttentions, outputHiddenStates, layers}

@@ -1,35 +1,65 @@
 package bert
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
-
 	"github.com/sugarme/transformer/common"
 )
 
 // BertConfig defines the BERT model architecture (i.e., number of layers,
 // hidden layer size, label mapping...)
 type BertConfig struct {
-	HiddenAct                 common.ActivationFn `json:"hidden_act"`
-	AttentionProbsDropoutProb float64             `json:"attention_probs_dropout_prob"`
-	HiddenDropoutProb         float64             `json:"hidden_dropout_prob"`
-	HiddenSize                int64               `json:"hidden_size"`
-	InitializerRange          float32             `json:"initializer_range"`
-	IntermediateSize          int64               `json:"intermediate_size"`
-	MaxPositionEmbeddings     int64               `json:"max_position_embeddings"`
-	NumAttentionHeads         int64               `json:"num_attention_heads"`
-	NumHiddenLayers           int64               `json:"num_hidden_layers"`
-	TypeVocabSize             int64               `json:"type_vocab_size"`
-	VocabSize                 int64               `json:"vocab_size"`
-	OutputAttentions          bool                `json:"output_attentions"`
-	OutputHiddenStates        bool                `json:"output_hidden_states"`
-	IsDecoder                 bool                `json:"is_decoder"`
-	Id2Label                  map[int64]string    `json:"id_2_label"`
-	Label2Id                  map[string]int64    `json:"label_2_id"`
-	NumLabels                 int64               `json:"num_labels"`
+	HiddenAct                 string           `json:"hidden_act"`
+	AttentionProbsDropoutProb float64          `json:"attention_probs_dropout_prob"`
+	HiddenDropoutProb         float64          `json:"hidden_dropout_prob"`
+	HiddenSize                int64            `json:"hidden_size"`
+	InitializerRange          float32          `json:"initializer_range"`
+	IntermediateSize          int64            `json:"intermediate_size"`
+	MaxPositionEmbeddings     int64            `json:"max_position_embeddings"`
+	NumAttentionHeads         int64            `json:"num_attention_heads"`
+	NumHiddenLayers           int64            `json:"num_hidden_layers"`
+	TypeVocabSize             int64            `json:"type_vocab_size"`
+	VocabSize                 int64            `json:"vocab_size"`
+	OutputAttentions          bool             `json:"output_attentions"`
+	OutputHiddenStates        bool             `json:"output_hidden_states"`
+	IsDecoder                 bool             `json:"is_decoder"`
+	Id2Label                  map[int64]string `json:"id_2_label"`
+	Label2Id                  map[string]int64 `json:"label_2_id"`
+	NumLabels                 int64            `json:"num_labels"`
+}
+
+func ConfigFromFile(filename string) (retVal BertConfig) {
+	filePath, err := filepath.Abs(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	buff, err := ioutil.ReadAll(f)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var config BertConfig
+	err = json.Unmarshal(buff, &config)
+	if err != nil {
+		fmt.Println(err)
+		log.Fatalf("Could not parse configuration to BertConfiguration.\n")
+	}
+	return config
 }
 
 // BertModel defines base architecture for BERT models.
@@ -156,6 +186,71 @@ func (b BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbe
 	pooledOutput := b.Pooler.Forward(hiddenState)
 
 	return hiddenState, pooledOutput, allHiddenStates, allAttentions, nil
+}
+
+// BertPredictionHeadTransform:
+// ============================
+
+type BertPredictionHeadTransform struct {
+	Dense      nn.Linear
+	Activation common.ActivationFn
+	LayerNorm  nn.LayerNorm
+}
+
+func NewBertPredictionHeadTransform(p nn.Path, config BertConfig) (retVal BertPredictionHeadTransform) {
+	dense := nn.NewLinear(p.Sub("dense"), config.HiddenSize, config.HiddenSize, nn.DefaultLinearConfig())
+	activation, ok := common.ActivationFnMap[config.HiddenAct]
+	if !ok {
+		log.Fatalf("Unsupported activation function - %v\n", config.HiddenAct)
+	}
+
+	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int64{config.HiddenSize}, nn.DefaultLayerNormConfig())
+
+	return BertPredictionHeadTransform{dense, activation, layerNorm}
+}
+
+func (bpht BertPredictionHeadTransform) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
+	tmp1 := hiddenStates.Apply(bpht.Dense)
+	tmp2 := bpht.Activation.Fwd(tmp1)
+	retVal = tmp2.Apply(bpht.LayerNorm)
+	tmp1.MustDrop()
+	tmp2.MustDrop()
+
+	return retVal
+}
+
+// BertLMPredictionHead:
+// =====================
+
+type BertLMPredictionHead struct {
+	Transform BertPredictionHeadTransform
+	Decoder   common.LinearNoBias
+	Bias      ts.Tensor
+}
+
+func NewBertLMPredictionHead(p nn.Path, config BertConfig) (retVal BertLMPredictionHead) {
+	path := p.Sub("predictions")
+	transform := NewBertPredictionHeadTransform(path.Sub("transform"), config)
+	decoder := common.NewLinearNoBias(path.Sub("decoder"), config.HiddenSize, config.VocabSize, common.DefaultLinearNoBiasConfig())
+	bias := path.NewVar("bias", []int64{config.VocabSize}, nn.NewKaimingUniformInit())
+
+	return BertLMPredictionHead{transform, decoder, bias}
+}
+
+// BertForMaskedLM:
+// ================
+
+// BertForMaskedLM is BERT for masked language model
+type BertForMaskedLM struct {
+	Bert BertModel
+	CLS  BertLMPredictionHead
+}
+
+func NewBertForMaskedLM(p nn.Path, config BertConfig) (retVal BertForMaskedLM) {
+	bert := NewBertModel(p.Sub("bert"), config)
+	cls := NewBertLMPredictionHead(p.Sub("cls"), config)
+
+	return BertForMaskedLM{bert, cls}
 }
 
 // TODO: continue...

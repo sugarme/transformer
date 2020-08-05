@@ -6,3 +6,8 @@ github.com/sugarme/gotch v0.0.0-20200804051621-79a0c2e6bf52 h1:2WOfBtFWJoGb6mIy7
 github.com/sugarme/gotch v0.0.0-20200804051621-79a0c2e6bf52/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
 github.com/sugarme/gotch v0.0.0-20200805003101-282c54f185e4 h1:g9194jGNtFiw3W3rxRPBLOw5hhBLqsKUGxGHsCnrCMg=
 github.com/sugarme/gotch v0.0.0-20200805003101-282c54f185e4/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
+github.com/sugarme/gotch v0.0.0-20200805071017-17b9e6c46f26 h1:JRy8bDRUjPn+cGLr7tQbGkLrD8EZ6UyyLszfQVksTb8=
+github.com/sugarme/gotch v0.0.0-20200805071017-17b9e6c46f26/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
+github.com/sugarme/gotch v0.0.0-20200805103101-f2fd373edfeb h1:NNpsGXhpEPNzARyH93AqN1oND+ByUF2gxKIiJKFgiew=
+github.com/sugarme/gotch v0.0.0-20200805103101-f2fd373edfeb/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
+github.com/sugarme/tokenizer v0.0.0-20200803070331-9e3c91cec92f h1:2MARfvUAFkQ99zXlaoS0et9JsMKF1olpzXdCIQwXi0M=

@@ -24,8 +24,12 @@ func NewRelu() ReluActivation {
 	return ReluActivation{"relu"}
 }
 
-func (r *ReluActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (r ReluActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
 	return x.MustRelu(false)
+}
+
+func (r ReluActivation) Name() (retVal string) {
+	return r.name
 }
 
 // GeLU activation:
@@ -41,8 +45,12 @@ func NewGelu() GeluActivation {
 	return GeluActivation{"gelu"}
 }
 
-func (g *GeluActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (g GeluActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
 	return x.MustGelu(false)
+}
+
+func (g GeluActivation) Name() (retVal string) {
+	return g.name
 }
 
 // Tanh activation:
@@ -58,11 +66,11 @@ func NewTanh() TanhActivation {
 	return TanhActivation{"tanh"}
 }
 
-func (t *TanhActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (t TanhActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
 	return x.MustTanh(false)
 }
 
-func (t *TanhActivation) Name() string {
+func (t TanhActivation) Name() string {
 	return t.name
 }
 
@@ -79,11 +87,15 @@ func NewSwish() SwishActivation {
 	return SwishActivation{"swish"}
 }
 
-func (s *SwishActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (s SwishActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
 	return x.Swish()
 }
 
-// Swish activation:
+func (s SwishActivation) Name() (retVal string) {
+	return s.name
+}
+
+// Mish activation:
 // =================
 
 type MishActivation struct {
@@ -96,7 +108,7 @@ func NewMish() MishActivation {
 	return MishActivation{"mish"}
 }
 
-func (m *MishActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (m MishActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
 	softplus := x.MustSoftplus(false)
 	tanh := softplus.MustTanh(true)
 	retVal = x.MustMm(tanh, false)
@@ -104,8 +116,20 @@ func (m *MishActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
 	return retVal
 }
 
+func (m MishActivation) Name() (retVal string) {
+	return m.name
+}
+
 func geluNew(xs ts.Tensor) (retVal ts.Tensor) {
 	// TODO: implement
 	// x * 0.5 * (((x.pow(3.0f64) * 0.044715 + x) * ((2f64 / PI).sqrt())).tanh() + 1)
 	return retVal
+}
+
+var ActivationFnMap map[string]ActivationFn = map[string]ActivationFn{
+	"gelu":  NewGelu(),
+	"relu":  NewRelu(),
+	"tanh":  NewTanh(),
+	"swish": NewSwish(),
+	"mish":  NewMish(),
 }

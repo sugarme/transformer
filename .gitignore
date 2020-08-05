@@ -10,3 +10,5 @@ example/testdata/
 
 *.txt
 *.json
+
+data/

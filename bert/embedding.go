@@ -37,7 +37,7 @@ func NewBertEmbedding(p nn.Path, config BertConfig) (retVal BertEmbeddings) {
 	positionEmbeddings := nn.NewEmbedding(posEmbedPath, config.VocabSize, config.HiddenSize, embeddingConfig)
 
 	ttEmbedPath := p.Sub("token_type_embeddings")
-	tokenTypeEmbeddings := nn.NewEmbedding(ttEmbedPath, config.VocabSize, config.HiddenSize, embeddingConfig)
+	tokenTypeEmbeddings := nn.NewEmbedding(ttEmbedPath, config.TypeVocabSize, config.HiddenSize, embeddingConfig)
 
 	layerNormConfig := nn.DefaultLayerNormConfig()
 	layerNormConfig.Eps = 1e-12
