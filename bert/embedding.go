@@ -34,7 +34,7 @@ func NewBertEmbedding(p nn.Path, config BertConfig) (retVal BertEmbeddings) {
 	wordEmbeddings := nn.NewEmbedding(wEmbedPath, config.VocabSize, config.HiddenSize, embeddingConfig)
 
 	posEmbedPath := p.Sub("position_embeddings")
-	positionEmbeddings := nn.NewEmbedding(posEmbedPath, config.VocabSize, config.HiddenSize, embeddingConfig)
+	positionEmbeddings := nn.NewEmbedding(posEmbedPath, config.MaxPositionEmbeddings, config.HiddenSize, embeddingConfig)
 
 	ttEmbedPath := p.Sub("token_type_embeddings")
 	tokenTypeEmbeddings := nn.NewEmbedding(ttEmbedPath, config.TypeVocabSize, config.HiddenSize, embeddingConfig)

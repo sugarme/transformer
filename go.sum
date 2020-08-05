@@ -10,4 +10,6 @@ github.com/sugarme/gotch v0.0.0-20200805071017-17b9e6c46f26 h1:JRy8bDRUjPn+cGLr7
 github.com/sugarme/gotch v0.0.0-20200805071017-17b9e6c46f26/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
 github.com/sugarme/gotch v0.0.0-20200805103101-f2fd373edfeb h1:NNpsGXhpEPNzARyH93AqN1oND+ByUF2gxKIiJKFgiew=
 github.com/sugarme/gotch v0.0.0-20200805103101-f2fd373edfeb/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
+github.com/sugarme/gotch v0.0.0-20200805231839-5edded6ca1c4 h1:ZJfIySJ0W255U54x2YSxlofzLjzqCFQW7FjceDjcaPs=
+github.com/sugarme/gotch v0.0.0-20200805231839-5edded6ca1c4/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
 github.com/sugarme/tokenizer v0.0.0-20200803070331-9e3c91cec92f h1:2MARfvUAFkQ99zXlaoS0et9JsMKF1olpzXdCIQwXi0M=

@@ -23,7 +23,7 @@ type LinearNoBias struct {
 func NewLinearNoBias(vs nn.Path, inDim, outDim int64, config LinearNoBiasConfig) (retVal LinearNoBias) {
 
 	return LinearNoBias{
-		Ws: vs.NewVar("weight", []int64{inDim, outDim}, config.WsInit),
+		Ws: vs.NewVar("weight", []int64{outDim, inDim}, config.WsInit),
 	}
 }
 
