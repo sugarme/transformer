@@ -80,12 +80,6 @@ type BertModel struct {
 // NewBertModel builds a new `BertModel`
 // * `p` Variable store path for the root of the BERT Model
 // * `config` `BertConfig` configuration for model architecture and decoder status
-// Example: TODO - create example
-// let config_path = Path::new("path/to/config.json");
-// let device = Device::Cpu;
-// let p = nn::VarStore::new(device);
-// let config = BertConfig::from_file(config_path);
-// let bert: BertModel<BertEmbeddings> = BertModel::new(&(&p.root() / "bert"), &config);
 func NewBertModel(p nn.Path, config BertConfig) (retVal BertModel) {
 	isDecoder := false
 	if config.IsDecoder {
@@ -99,6 +93,25 @@ func NewBertModel(p nn.Path, config BertConfig) (retVal BertModel) {
 	return BertModel{embeddings, encoder, pooler, isDecoder}
 }
 
+// ForwardT forwards pass through the model
+//
+// # Arguments
+//
+// * `inputIds` - Optional input tensor of shape (*batch size*, *sequenceLength*). If None, pre-computed embeddings must be provided (see `inputEmbeds`)
+// * `mask` - Optional mask of shape (*batch size*, *sequenceLength*). Masked position have value 0, non-masked value 1. If None set to 1
+// * `tokenTypeIds` - Optional segment id of shape (*batch size*, *sequenceLength*). Convention is value of 0 for the first sentence (incl. *[SEP]*) and 1 for the second sentence. If None set to 0.
+// * `positionIds` - Optional position ids of shape (*batch size*, *sequenceLength*). If None, will be incremented from 0.
+// * `inputEmbeds` - Optional pre-computed input embeddings of shape (*batch size*, *sequenceLength*, *hiddenSize*). If None, input ids must be provided (see `inputIds`)
+// * `encoderHiddenStates` - Optional encoder hidden state of shape (*batch size*, *encoderSequenceLength*, *hiddenSize*). If the model is defined as a decoder and the `encoderHiddenStates` is not None, used in the cross-attention layer as keys and values (query from the decoder).
+// * `encoderMask` - Optional encoder attention mask of shape (*batch size*, *encoderSequenceLength*). If the model is defined as a decoder and the `encoderHiddenStates` is not None, used to mask encoder values. Positions with value 0 will be masked.
+// * `train` - boolean flag to turn on/off the dropout layers in the model. Should be set to false for inference.
+//
+// # Returns
+//
+// * `output` - `Tensor` of shape (*batch size*, *sequenceLength*, *hiddenSize*)
+// * `pooledOutput` - `Tensor` of shape (*batch size*, *hiddenSize*)
+// * `hiddenStates` - `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+// * `attentions` - `[]ts.Tensor` of length *num_hidden_layers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
 func (b BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
 
 	var (
@@ -143,7 +156,7 @@ func (b BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbe
 			causalMask := causalMaskTmp.MustLe1(seqIds.MustUnsqueeze(0, true).MustUnsqueeze(1, true), true)
 			extendedAttentionMask = causalMask.MustMatmul(mask.MustUnsqueeze(1, false).MustUnsqueeze(1, true), true)
 		} else {
-			extendedAttentionMask = mask.MustUnsqueeze(1, false).MustUnsqueeze(1, true)
+			extendedAttentionMask = maskTs.MustUnsqueeze(1, false).MustUnsqueeze(1, true)
 		}
 
 	default:
@@ -237,13 +250,22 @@ func NewBertLMPredictionHead(p nn.Path, config BertConfig) (retVal BertLMPredict
 	return BertLMPredictionHead{transform, decoder, bias}
 }
 
+func (ph BertLMPredictionHead) Forward(hiddenState ts.Tensor) ts.Tensor {
+	fwTensor := ph.Transform.Forward(hiddenState).Apply(ph.Decoder)
+
+	retVal := fwTensor.MustAdd(ph.Bias, false)
+	fwTensor.MustDrop()
+
+	return retVal
+}
+
 // BertForMaskedLM:
 // ================
 
 // BertForMaskedLM is BERT for masked language model
 type BertForMaskedLM struct {
-	Bert BertModel
-	CLS  BertLMPredictionHead
+	bert BertModel
+	cls  BertLMPredictionHead
 }
 
 func NewBertForMaskedLM(p nn.Path, config BertConfig) (retVal BertForMaskedLM) {
@@ -251,6 +273,36 @@ func NewBertForMaskedLM(p nn.Path, config BertConfig) (retVal BertForMaskedLM) {
 	cls := NewBertLMPredictionHead(p.Sub("cls"), config)
 
 	return BertForMaskedLM{bert, cls}
+}
+
+// ForwardT forwards pass through the model
+//
+// # Arguments
+//
+// * `inputIds` - Optional input tensor of shape (*batch size*, *sequenceLength*). If None, pre-computed embeddings must be provided (see *inputEmbeds*)
+// * `mask` - Optional mask of shape (*batch size*, *sequenceLength*). Masked position have value 0, non-masked value 1. If None set to 1
+// * `tokenTypeIds` -Optional segment id of shape (*batch size*, *sequenceLength*). Convention is value of 0 for the first sentence (incl. *[SEP]*) and 1 for the second sentence. If None set to 0.
+// * `positionIds` - Optional position ids of shape (*batch size*, *sequenceLength*). If None, will be incremented from 0.
+// * `inputEmbeds` - Optional pre-computed input embeddings of shape (*batch size*, *sequenceLength*, *hiddenSize*). If None, input ids must be provided (see *inputIds*)
+// * `encoderHiddenStates` - Optional encoder hidden state of shape (*batch size*, *encoderSequenceLength*, *hiddenSize*). If the model is defined as a decoder and the *encoderHiddenStates* is not None, used in the cross-attention layer as keys and values (query from the decoder).
+// * `encoderMask` - Optional encoder attention mask of shape (*batch size*, *encoderSequenceLength*). If the model is defined as a decoder and the *encoderHiddenStates* is not None, used to mask encoder values. Positions with value 0 will be masked.
+// * `train` - boolean flag to turn on/off the dropout layers in the model. Should be set to false for inference.
+//
+// # Returns
+//
+// * `output` - `Tensor` of shape (*batch size*, *numLabels*, *vocabSize*)
+// * `hiddenStates` - `[]ts.Tensor` of length *num_hidden_layers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+// * `attentions` - `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+func (mlm BertForMaskedLM) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1 ts.Tensor, optRetVal1, optRetVal2 []ts.Tensor) {
+
+	hiddenState, _, allHiddenStates, allAttentions, err := mlm.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask, train)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	predictionScores := mlm.cls.Forward(hiddenState)
+
+	return predictionScores, allHiddenStates, allAttentions
 }
 
 // TODO: continue...

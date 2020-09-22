@@ -1,6 +1,7 @@
 package bert
 
 import (
+	// "fmt"
 	"log"
 	"math"
 
@@ -85,6 +86,7 @@ func (bsa BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, e
 
 	hiddenStatesQ := hiddenStates.Apply(bsa.Query)
 	query := bsa.splitHeads(hiddenStatesQ, bs, bsa.AttentionHeadSize)
+
 	hiddenStatesQ.MustDrop()
 	keyLayer := bsa.splitHeads(key, bs, bsa.AttentionHeadSize)
 	key.MustDrop()
@@ -108,6 +110,7 @@ func (bsa BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, e
 	weights := scores.MustSoftmax(-1, gotch.Float, true).ApplyT(bsa.Dropout, train)
 
 	weightsMul := weights.MustMatmul(valueLayer, false)
+
 	context := bsa.flatten(weightsMul, bs, bsa.AttentionHeadSize)
 	weightsMul.MustDrop()
 
@@ -146,9 +149,9 @@ func NewBertSelfOutput(p nn.Path, config BertConfig) (retVal BertSelfOutput) {
 
 func (bso BertSelfOutput) ForwardT(hiddenStates ts.Tensor, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
 
-	state1 := inputTensor.MustAdd(hiddenStates, false)
-	state2 := state1.Apply(bso.Linear)
-	state3 := state2.ApplyT(bso.Dropout, train)
+	state1 := hiddenStates.Apply(bso.Linear)
+	state2 := state1.ApplyT(bso.Dropout, train)
+	state3 := inputTensor.MustAdd(state2, false)
 
 	retVal = state3.Apply(bso.LayerNorm)
 	state1.MustDrop()

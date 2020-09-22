@@ -44,25 +44,24 @@ func NewBertLayer(p nn.Path, config BertConfig) (retVal BertLayer) {
 
 func (bl BertLayer) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt1, retValOpt2 ts.Tensor) {
 	var (
-		attentionOuput        ts.Tensor
+		attentionOutput       ts.Tensor
 		attentionWeights      ts.Tensor
 		crossAttentionWeights ts.Tensor
 	)
 
 	if bl.IsDecoder && encoderHiddenStates.MustDefined() {
-		var attentionOuputTmp ts.Tensor
-		attentionOuputTmp, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.None, ts.None, train)
-		attentionOuput, crossAttentionWeights = bl.CrossAttention.ForwardT(attentionOuputTmp, mask, encoderHiddenStates, encoderMask, train)
-		attentionOuputTmp.MustDrop()
-
+		var attentionOutputTmp ts.Tensor
+		attentionOutputTmp, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.None, ts.None, train)
+		attentionOutput, crossAttentionWeights = bl.CrossAttention.ForwardT(attentionOutputTmp, mask, encoderHiddenStates, encoderMask, train)
+		attentionOutputTmp.MustDrop()
 	} else {
-		attentionOuput, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.None, ts.None, train)
+		attentionOutput, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.None, ts.None, train)
 		crossAttentionWeights = ts.None
 	}
 
-	outputTmp := bl.Intermediate.Forward(attentionOuput)
-	attentionOuput.MustDrop()
-	output := bl.Output.ForwardT(outputTmp, attentionOuput, train)
+	outputTmp := bl.Intermediate.Forward(attentionOutput)
+	output := bl.Output.ForwardT(outputTmp, attentionOutput, train)
+	attentionOutput.MustDrop()
 	outputTmp.MustDrop()
 
 	return output, attentionWeights, crossAttentionWeights
@@ -102,7 +101,7 @@ func NewBertEncoder(p nn.Path, config BertConfig) (retVal BertEncoder) {
 // Forward ...
 func (be BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 	var (
-		allHiddenStates, allAttentions []ts.Tensor
+		allHiddenStates, allAttentions []ts.Tensor = nil, nil
 	)
 
 	hiddenState := hiddenStates
@@ -126,7 +125,9 @@ func (be BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderM
 		if allAttentions != nil {
 			allAttentions = append(allAttentions, attnWeightsTmp)
 		}
-		attnWeightsTmp.MustDrop()
+
+		// TODO: should we need to delete `stateTmp` and `attnWeightsTmp` after all?
+
 	}
 
 	return hiddenState, allHiddenStates, allAttentions
