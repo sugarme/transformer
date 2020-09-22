@@ -305,4 +305,80 @@ func (mlm BertForMaskedLM) ForwardT(inputIds, mask, tokenTypeIds, positionIds, i
 	return predictionScores, allHiddenStates, allAttentions
 }
 
+// BERT for sequence classification:
+// =================================
+
+// Base BERT model with a classifier head to perform sentence or document-level classification
+// It is made of the following blocks:
+// - `bert`: Base BertModel
+// - `classifier`: BERT linear layer for classification
+type BertForSequenceClassification struct {
+	bert       BertModel
+	dropout    common.Dropout
+	classifier nn.Linear
+}
+
+// NewBertForSequenceClassification creates a new `BertForSequenceClassification`
+//
+// # Arguments
+//
+// * `p` - Variable store path for the root of the BertForSequenceClassification model
+// * `config` - `BertConfig` object defining the model architecture and number of classes
+//
+// # Example
+//
+// ```go
+//
+// device := gotch.CPU
+// vs := nn.NewVarStore(device)
+// config := bert.ConfigFromFile("path/to/config.json")
+// p := vs.Root()
+// bert := NewBertForSequenceClassification(p.Sub("bert"), config)
+//
+// ```
+func NewBertForSequenceClassification(p nn.Path, config BertConfig) BertForSequenceClassification {
+	bert := NewBertModel(p.Sub("bert"), config)
+	dropout := common.NewDropout(config.HiddenDropoutProb)
+	numLabels := len(config.Id2Label)
+
+	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
+
+	return BertForSequenceClassification{
+		bert:       bert,
+		dropout:    dropout,
+		classifier: classifier,
+	}
+}
+
+// ForwardT forwards pass through the model
+//
+// # Arguments
+//
+// * `inputIds` - Optional input tensor of shape (*batch size*, *sequenceLength*). If None, pre-computed embeddings must be provided (see `inputEmbeds`)
+// * `mask` - Optional mask of shape (*batch size*, *sequenceLength*). Masked position have value 0, non-masked value 1. If None set to 1
+// * `tokenTypeIds` -Optional segment id of shape (*batch size*, *sequenceLength*). Convention is value of 0 for the first sentence (incl. *[SEP]*) and 1 for the second sentence. If None set to 0.
+// * `positionIds` - Optional position ids of shape (*batch size*, *sequenceLength*). If None, will be incremented from 0.
+// * `inputEmbeds` - Optional pre-computed input embeddings of shape (*batch size*, *sequenceLength*, *hiddenSize*). If None, input ids must be provided (see `inputIds`)
+// * `train` - boolean flag to turn on/off the dropout layers in the model. Should be set to false for inference.
+//
+// # Returns
+//
+// * `labels` - `Tensor` of shape (*batch size*, *numLabels*)
+// * `hiddenStates` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+// * `attentions` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+func (bsc BertForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+	_, pooledOutput, allHiddenStates, allAttentions, err := bsc.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+
+	if err != nil {
+		log.Fatalf("call bert.ForwardT error: %v", err)
+	}
+
+	dropoutOutput := pooledOutput.ApplyT(bsc.dropout, train)
+
+	output := dropoutOutput.Apply(bsc.classifier)
+	dropoutOutput.MustDrop()
+
+	return output, allHiddenStates, allAttentions
+}
+
 // TODO: continue...
