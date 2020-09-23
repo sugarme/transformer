@@ -381,4 +381,226 @@ func (bsc BertForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, 
 	return output, allHiddenStates, allAttentions
 }
 
-// TODO: continue...
+// BERT for multiple choices :
+// ===========================
+
+// BertForMultipleChoice constructs multiple choices model using a BERT base model and a linear classifier.
+// Input should be in the form `[CLS] Context [SEP] Possible choice [SEP]`. The choice is made along the batch axis,
+// assuming all elements of the batch are alternatives to be chosen from for a given context.
+// It is made of the following blocks:
+// - `bert`: Base BertModel
+// - `classifier`: Linear layer for multiple choices
+type BertForMultipleChoice struct {
+	bert       BertModel
+	dropout    common.Dropout
+	classifier nn.Linear
+}
+
+// NewBertForMultipleChoice creates a new `BertForMultipleChoice`
+//
+// # Arguments
+//
+// * `p` - Variable store path for the root of the BertForMultipleChoice model
+// * `config` - `BertConfig` object defining the model architecture
+//
+func NewBertForMultipleChoice(p nn.Path, config BertConfig) BertForMultipleChoice {
+	bert := NewBertModel(p.Sub("bert"), config)
+	dropout := common.NewDropout(config.HiddenDropoutProb)
+	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, 1, nn.DefaultLinearConfig())
+
+	return BertForMultipleChoice{
+		bert:       bert,
+		dropout:    dropout,
+		classifier: classifier,
+	}
+}
+
+// ForwardT forwards pass through the model
+//
+// # Arguments
+//
+// * `inputIds` - Input tensor of shape (*batch size*, *sequenceLength*).
+// * `mask` - Optional mask of shape (*batch size*, *sequenceLength*). Masked position have value 0, non-masked value 1. If None set to 1
+// * `tokenTypeIds` -Optional segment id of shape (*batch size*, *sequenceLength*). Convention is value of 0 for the first sentence (incl. *[SEP]*) and 1 for the second sentence. If None set to 0.
+// * `positionIds` - Optional position ids of shape (*batch size*, *sequenceLength*). If None, will be incremented from 0.
+// * `train` - boolean flag to turn on/off the dropout layers in the model. Should be set to false for inference.
+//
+// # Returns
+//
+// * `output` - `Tensor` of shape (*1*, *batch size*) containing the logits for each of the alternatives given
+// * `hiddenStates` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+// * `attentions` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+func (mc BertForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, positionIds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+
+	inputIdsSize := inputIds.MustSize()
+	numChoices := inputIdsSize[1]
+	inputIdsView := inputIds.MustView([]int64{-1, inputIdsSize[len(inputIdsSize)-1]}, false)
+
+	maskView := ts.None
+	if mask.MustDefined() {
+		maskSize := mask.MustSize()
+		maskView = mask.MustView([]int64{-1, maskSize[len(maskSize)-1]}, false)
+	}
+
+	tokenTypeIdsView := ts.None
+	if tokenTypeIds.MustDefined() {
+		tokenTypeIdsSize := tokenTypeIds.MustSize()
+		tokenTypeIdsView = tokenTypeIds.MustView([]int64{-1, tokenTypeIdsSize[len(tokenTypeIdsSize)-1]}, false)
+	}
+
+	positionIdsView := ts.None
+	if positionIds.MustDefined() {
+		positionIdsSize := positionIds.MustSize()
+		positionIdsView = positionIds.MustView([]int64{-1, positionIdsSize[len(positionIdsSize)-1]}, false)
+	}
+
+	_, pooledOutput, allHiddenStates, allAttentions, err := mc.bert.ForwardT(inputIdsView, maskView, tokenTypeIdsView, positionIdsView, ts.None, ts.None, ts.None, train)
+	if err != nil {
+		log.Fatalf("Call 'BertForMultipleChoice ForwordT' method error: %v\n", err)
+	}
+
+	outputDropout := pooledOutput.ApplyT(mc.dropout, train)
+	outputClassifier := outputDropout.Apply(mc.classifier)
+
+	output := outputClassifier.MustView([]int64{-1, numChoices}, false)
+
+	outputDropout.MustDrop()
+	outputClassifier.MustDrop()
+
+	return output, allHiddenStates, allAttentions
+}
+
+// BERT for token classification (e.g., NER, POS):
+// ===============================================
+
+// BertForTokenClassification constructs token-level classifier predicting a label for each token provided.
+// Note that because of wordpiece tokenization, the labels predicted are not necessarily aligned with words in the sentence.
+// It is made of the following blocks:
+// - `bert`: Base BertModel
+// - `classifier`: Linear layer for token classification
+type BertForTokenClassification struct {
+	bert       BertModel
+	dropout    common.Dropout
+	classifier nn.Linear
+}
+
+// NewBertForTokenClassification creates a new `BertForTokenClassification`
+//
+// # Arguments
+//
+// * `p` - Variable store path for the root of the BertForTokenClassification model
+// * `config` - `BertConfig` object defining the model architecture, number of output labels and label mapping
+func NewBertForTokenClassification(p nn.Path, config BertConfig) BertForTokenClassification {
+	bert := NewBertModel(p.Sub("bert"), config)
+	dropout := common.NewDropout(config.HiddenDropoutProb)
+
+	numLabels := len(config.Id2Label)
+	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
+
+	return BertForTokenClassification{
+		bert:       bert,
+		dropout:    dropout,
+		classifier: classifier,
+	}
+}
+
+// ForwordT forwards pass through the model
+//
+// # Arguments
+//
+// * `inputIds` - Optional input tensor of shape (*batch size*, *sequenceLength*). If None, pre-computed embeddings must be provided (see `inputEmbeds`)
+// * `mask` - Optional mask of shape (*batch size*, *sequenceLength*). Masked position have value 0, non-masked value 1. If None set to 1
+// * `tokenTypeIds` -Optional segment id of shape (*batch size*, *sequenceLength*). Convention is value of 0 for the first sentence (incl. *[SEP]*) and 1 for the second sentence. If None set to 0.
+// * `positionIds` - Optional position ids of shape (*batch size*, *sequenceLength*). If None, will be incremented from 0.
+// * `inputEmbeds` - Optional pre-computed input embeddings of shape (*batch size*, *sequenceLength*, *hiddenSize*). If None, input ids must be provided (see `inputIds`)
+// * `train` - boolean flag to turn on/off the dropout layers in the model. Should be set to false for inference.
+//
+// # Returns
+//
+// * `output` - `Tensor` of shape (*batch size*, *sequenceLength*, *numLabels*) containing the logits for each of the input tokens and classes
+// * `hiddenStates` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+// * `attentions` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+func (tc BertForTokenClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+
+	hiddenState, _, allHiddenStates, allAttentions, err := tc.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+	if err != nil {
+		log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
+	}
+
+	outputDropout := hiddenState.ApplyT(tc.dropout, train)
+	output := outputDropout.Apply(tc.classifier)
+
+	outputDropout.MustDrop()
+
+	return output, allHiddenStates, allAttentions
+}
+
+// BERT for question answering:
+// ============================
+
+// BertForQuestionAnswering constructs extractive question-answering model based on a BERT language model. Identifies the segment of a context that answers a provided question.
+// Please note that a significant amount of pre- and post-processing is required to perform end-to-end question answering.
+// See the question answering pipeline (also provided in this crate) for more details.
+// It is made of the following blocks:
+// - `bert`: Base BertModel
+// - `qa_outputs`: Linear layer for question answering
+type BertForQuestionAnswering struct {
+	bert      BertModel
+	qaOutputs nn.Linear
+}
+
+// NewBertForQuestionAnswering creates a new `BertForQuestionAnswering`
+//
+// # Arguments
+//
+// * `p` - Variable store path for the root of the BertForQuestionAnswering model
+// * `config` - `BertConfig` object defining the model architecture
+func NewBertQuestionAnswering(p nn.Path, config BertConfig) BertForQuestionAnswering {
+	bert := NewBertModel(p.Sub("bert"), config)
+
+	numLabels := 2
+	qaOutputs := nn.NewLinear(p.Sub("qa_outputs"), config.HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
+
+	return BertForQuestionAnswering{
+		bert:      bert,
+		qaOutputs: qaOutputs,
+	}
+}
+
+// ForwardT forwards pass through the model
+//
+// # Arguments
+//
+// * `inputIds` - Optional input tensor of shape (*batch size*, *sequenceLength*). If None, pre-computed embeddings must be provided (see `inputEmbeds`)
+// * `mask` - Optional mask of shape (*batch size*, *sequenceLength*). Masked position have value 0, non-masked value 1. If None set to 1
+// * `tokenTypeIds` -Optional segment id of shape (*batch size*, *sequenceLength*). Convention is value of 0 for the first sentence (incl. *[SEP]*) and 1 for the second sentence. If None set to 0.
+// * `positionIds` - Optional position ids of shape (*batch size*, *sequenceLength*). If None, will be incremented from 0.
+// * `inputEmbeds` - Optional pre-computed input embeddings of shape (*batch size*, *sequenceLength*, *hiddenSize*). If None, input ids must be provided (see `inputIds`)
+// * `train` - boolean flag to turn on/off the dropout layers in the model. Should be set to false for inference.
+//
+// # Returns
+//
+// * `startScores` - `Tensor` of shape (*batch size*, *sequenceLength*) containing the logits for start of the answer
+// * `endScores` - `Tensor` of shape (*batch size*, *sequenceLength*) containing the logits for end of the answer
+// * `hiddenStates` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+// * `attentions` - Optional `[]ts.Tensor` of length *num_hidden_layers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
+func (qa BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+
+	/*
+	 *   //NOTE: Temp comment out due to `gotch` missing api ts.MustSplit
+	 *
+	 *   hiddenState, _, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+	 *   if err != nil {
+	 *     log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
+	 *   }
+	 *
+	 *   sequenceOutput := hiddenState.Apply(qa.qaOutputs)
+	 *   logits := sequenceOutput.MustSplit([]int64{1, -1}, false)
+	 *   startLogits := logits[0].MustSqueeze1([]int64{-1}, false)
+	 *   endLogits := logits[1].MustSqueeze1([]int64{-1}, false)
+	 *
+	 *   return startLogits, endLogits, allHiddenStates, allAttentions
+	 *  */
+
+	return
+}

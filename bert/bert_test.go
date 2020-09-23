@@ -1,8 +1,10 @@
-package main
+package bert_test
 
 import (
 	"fmt"
 	"log"
+	"reflect"
+	"testing"
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
@@ -15,14 +17,9 @@ import (
 	"github.com/sugarme/transformer/bert"
 )
 
-func main() {
-	// bertForMaskedLM()
-	bertForSequenceClassification()
-}
+func getBertTokenizer() (retVal *tokenizer.Tokenizer) {
 
-func getBert() (retVal *tokenizer.Tokenizer) {
-
-	vocabFile := "../../data/bert/vocab.txt"
+	vocabFile := "../data/bert/vocab.txt"
 
 	model, err := wordpiece.NewWordPieceFromFile(vocabFile, "[UNK]")
 	if err != nil {
@@ -30,7 +27,6 @@ func getBert() (retVal *tokenizer.Tokenizer) {
 	}
 
 	tk := tokenizer.NewTokenizer(model)
-	fmt.Printf("Vocab size: %v\n", tk.GetVocabSize(false))
 
 	bertNormalizer := normalizer.NewBertNormalizer(true, true, true, true)
 	tk.WithNormalizer(bertNormalizer)
@@ -61,26 +57,19 @@ func getBert() (retVal *tokenizer.Tokenizer) {
 	return tk
 }
 
-func bertForMaskedLM() {
+func TestBertForMaskedLM(t *testing.T) {
 
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../../data/bert/config.json")
-	// fmt.Printf("Bert Configuration:\n%+v\n", config)
-
+	config := bert.ConfigFromFile("../data/bert/config.json")
 	model := bert.NewBertForMaskedLM(vs.Root(), config)
-	err := vs.Load("../../data/bert/model.ot")
+	err := vs.Load("../data/bert/model.ot")
 	if err != nil {
 		log.Fatalf("Load model weight error: \n%v", err)
 	}
 
-	// fmt.Printf("Varstore weights have been loaded\n")
-	// fmt.Printf("Num of variables: %v\n", len(vs.Variables()))
-	// fmt.Printf("%v\n", vs.Variables())
-	// fmt.Printf("Bert is Decoder: %v\n", model.bert.IsDecoder)
-
-	tk := getBert()
+	tk := getBertTokenizer()
 	sentence1 := "Looks like one [MASK] is missing"
 	sentence2 := "It was a very nice and [MASK] day"
 
@@ -93,7 +82,6 @@ func bertForMaskedLM() {
 		log.Fatal(err)
 	}
 
-	// Find max length of token Ids from slice of encodings
 	var maxLen int = 0
 	for _, en := range encodings {
 		if len(en.Ids) > maxLen {
@@ -112,7 +100,6 @@ func bertForMaskedLM() {
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
-	// inputTensor.Print()
 
 	var output ts.Tensor
 	ts.NoGrad(func() {
@@ -122,24 +109,34 @@ func bertForMaskedLM() {
 	index1 := output.MustGet(0).MustGet(4).MustArgmax(0, false, false).Int64Values()[0]
 	index2 := output.MustGet(1).MustGet(7).MustArgmax(0, false, false).Int64Values()[0]
 
-	word1, ok := tk.IdToToken(int(index1))
+	got1, ok := tk.IdToToken(int(index1))
 	if !ok {
 		fmt.Printf("Cannot find a corresponding word for the given id (%v) in vocab.\n", index1)
 	}
-	fmt.Printf("Input: '%v' \t- Output: '%v'\n", sentence1, word1)
+	want1 := "person"
 
-	word2, ok := tk.IdToToken(int(index2))
+	if !reflect.DeepEqual(want1, got1) {
+		t.Errorf("Want: '%v'\n", want1)
+		t.Errorf("Got '%v'\n", got1)
+	}
+
+	got2, ok := tk.IdToToken(int(index2))
 	if !ok {
 		fmt.Printf("Cannot find a corresponding word for the given id (%v) in vocab.\n", index2)
 	}
-	fmt.Printf("Input: '%v' \t- Output: '%v'\n", sentence2, word2)
+	want2 := "pleasant"
+
+	if !reflect.DeepEqual(want2, got2) {
+		t.Errorf("Want: '%v'\n", want2)
+		t.Errorf("Got '%v'\n", got2)
+	}
 }
 
-func bertForSequenceClassification() {
+func TestBertForSequenceClassification(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../../data/bert/config.json")
+	config := bert.ConfigFromFile("../data/bert/config.json")
 
 	var dummyLabelMap map[int64]string = make(map[int64]string)
 	dummyLabelMap[0] = "positive"
@@ -150,7 +147,7 @@ func bertForSequenceClassification() {
 	config.OutputAttentions = true
 	config.OutputHiddenStates = true
 	model := bert.NewBertForSequenceClassification(vs.Root(), config)
-	tk := getBert()
+	tk := getBertTokenizer()
 
 	// Define input
 	sentence1 := "Looks like one thing is missing"
@@ -171,7 +168,6 @@ func bertForSequenceClassification() {
 		}
 	}
 
-	fmt.Printf("encodings: %v\n", encodings)
 	var tensors []ts.Tensor
 	for _, en := range encodings {
 		var tokInput []int64 = make([]int64, maxLen)
@@ -183,7 +179,6 @@ func bertForSequenceClassification() {
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
-	// inputTensor.Print()
 
 	var (
 		output                         ts.Tensor
@@ -195,9 +190,22 @@ func bertForSequenceClassification() {
 	})
 
 	fmt.Printf("output size: %v\n", output.MustSize())
+	gotOuputSize := output.MustSize()
+	wantOuputSize := []int64{2, 3}
+	if !reflect.DeepEqual(wantOuputSize, gotOuputSize) {
+		t.Errorf("Want: %v\n", wantOuputSize)
+		t.Errorf("Got: %v\n", gotOuputSize)
+	}
 
-	fmt.Printf("NumHiddenLayers: %v\n", config.NumHiddenLayers)
-	fmt.Printf("allHiddenStates length: %v\n", len(allHiddenStates))
-	fmt.Printf("allAttentions length: %v\n", len(allAttentions))
+	numHiddenLayers := int(config.NumHiddenLayers)
 
+	if !reflect.DeepEqual(numHiddenLayers, len(allHiddenStates)) {
+		t.Errorf("Want num of allHiddenStates: %v\n", numHiddenLayers)
+		t.Errorf("Got num of allHiddenStates: %v\n", len(allHiddenStates))
+	}
+
+	if !reflect.DeepEqual(numHiddenLayers, len(allAttentions)) {
+		t.Errorf("Want num of allAttentions: %v\n", numHiddenLayers)
+		t.Errorf("Got num of allAttentions: %v\n", len(allAttentions))
+	}
 }

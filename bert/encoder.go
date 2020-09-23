@@ -85,8 +85,8 @@ func NewBertEncoder(p nn.Path, config BertConfig) (retVal BertEncoder) {
 	}
 
 	outputHiddenStates := false
-	if config.OutputAttentions {
-		outputAttentions = true
+	if config.OutputHiddenStates {
+		outputHiddenStates = true
 	}
 
 	var layers []BertLayer
