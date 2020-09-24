@@ -433,6 +433,7 @@ func NewBertForMultipleChoice(p nn.Path, config BertConfig) BertForMultipleChoic
 func (mc BertForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, positionIds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 
 	inputIdsSize := inputIds.MustSize()
+	fmt.Printf("inputIdsSize: %v\n", inputIdsSize)
 	numChoices := inputIdsSize[1]
 	inputIdsView := inputIds.MustView([]int64{-1, inputIdsSize[len(inputIdsSize)-1]}, false)
 
@@ -555,7 +556,7 @@ type BertForQuestionAnswering struct {
 //
 // * `p` - Variable store path for the root of the BertForQuestionAnswering model
 // * `config` - `BertConfig` object defining the model architecture
-func NewBertQuestionAnswering(p nn.Path, config BertConfig) BertForQuestionAnswering {
+func NewForBertQuestionAnswering(p nn.Path, config BertConfig) BertForQuestionAnswering {
 	bert := NewBertModel(p.Sub("bert"), config)
 
 	numLabels := 2
@@ -586,21 +587,17 @@ func NewBertQuestionAnswering(p nn.Path, config BertConfig) BertForQuestionAnswe
 // * `attentions` - Optional `[]ts.Tensor` of length *num_hidden_layers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
 func (qa BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 
-	/*
-	 *   //NOTE: Temp comment out due to `gotch` missing api ts.MustSplit
-	 *
-	 *   hiddenState, _, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
-	 *   if err != nil {
-	 *     log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
-	 *   }
-	 *
-	 *   sequenceOutput := hiddenState.Apply(qa.qaOutputs)
-	 *   logits := sequenceOutput.MustSplit([]int64{1, -1}, false)
-	 *   startLogits := logits[0].MustSqueeze1([]int64{-1}, false)
-	 *   endLogits := logits[1].MustSqueeze1([]int64{-1}, false)
-	 *
-	 *   return startLogits, endLogits, allHiddenStates, allAttentions
-	 *  */
+	//NOTE: Temp comment out due to `gotch` missing api ts.MustSplit
 
-	return
+	hiddenState, _, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+	if err != nil {
+		log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
+	}
+
+	sequenceOutput := hiddenState.Apply(qa.qaOutputs)
+	logits := sequenceOutput.MustSplit(1, -1, false) // -1 : split along last size
+	startLogits := logits[0].MustSqueeze1(int64(-1), false)
+	endLogits := logits[1].MustSqueeze1(int64(-1), false)
+
+	return startLogits, endLogits, allHiddenStates, allAttentions
 }

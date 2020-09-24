@@ -209,3 +209,232 @@ func TestBertForSequenceClassification(t *testing.T) {
 		t.Errorf("Got num of allAttentions: %v\n", len(allAttentions))
 	}
 }
+
+func TestBertForMultipleChoice(t *testing.T) {
+	device := gotch.CPU
+	vs := nn.NewVarStore(device)
+
+	config := bert.ConfigFromFile("../data/bert/config.json")
+
+	config.OutputAttentions = true
+	config.OutputHiddenStates = true
+	model := bert.NewBertForMultipleChoice(vs.Root(), config)
+	tk := getBertTokenizer()
+
+	// Define input
+	sentence1 := "Looks like one thing is missing"
+	sentence2 := `It's like comparing oranges to apples`
+	var input []tokenizer.EncodeInput
+	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence1)))
+	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence2)))
+	encodings, err := tk.EncodeBatch(input, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Find max length of token Ids from slice of encodings
+	var maxLen int = 0
+	for _, en := range encodings {
+		if len(en.Ids) > maxLen {
+			maxLen = len(en.Ids)
+		}
+	}
+
+	var tensors []ts.Tensor
+	for _, en := range encodings {
+		var tokInput []int64 = make([]int64, maxLen)
+		for i := 0; i < len(en.Ids); i++ {
+			tokInput[i] = int64(en.Ids[i])
+		}
+
+		tensors = append(tensors, ts.TensorFrom(tokInput))
+	}
+
+	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true).MustUnsqueeze(0, true)
+
+	var (
+		output                         ts.Tensor
+		allHiddenStates, allAttentions []ts.Tensor
+	)
+
+	ts.NoGrad(func() {
+		output, allHiddenStates, allAttentions = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, false)
+	})
+
+	fmt.Printf("output size: %v\n", output.MustSize())
+	gotOuputSize := output.MustSize()
+	wantOuputSize := []int64{1, 2}
+	if !reflect.DeepEqual(wantOuputSize, gotOuputSize) {
+		t.Errorf("Want: %v\n", wantOuputSize)
+		t.Errorf("Got: %v\n", gotOuputSize)
+	}
+
+	numHiddenLayers := int(config.NumHiddenLayers)
+
+	if !reflect.DeepEqual(numHiddenLayers, len(allHiddenStates)) {
+		t.Errorf("Want num of allHiddenStates: %v\n", numHiddenLayers)
+		t.Errorf("Got num of allHiddenStates: %v\n", len(allHiddenStates))
+	}
+
+	if !reflect.DeepEqual(numHiddenLayers, len(allAttentions)) {
+		t.Errorf("Want num of allAttentions: %v\n", numHiddenLayers)
+		t.Errorf("Got num of allAttentions: %v\n", len(allAttentions))
+	}
+}
+
+func TestBertForTokenClassification(t *testing.T) {
+	device := gotch.CPU
+	vs := nn.NewVarStore(device)
+
+	config := bert.ConfigFromFile("../data/bert/config.json")
+
+	var dummyLabelMap map[int64]string = make(map[int64]string)
+	dummyLabelMap[0] = "O"
+	dummyLabelMap[1] = "LOC"
+	dummyLabelMap[2] = "PER"
+	dummyLabelMap[3] = "ORG"
+
+	config.Id2Label = dummyLabelMap
+	config.OutputAttentions = true
+	config.OutputHiddenStates = true
+	model := bert.NewBertForTokenClassification(vs.Root(), config)
+	tk := getBertTokenizer()
+
+	// Define input
+	sentence1 := "Looks like one thing is missing"
+	sentence2 := `It's like comparing oranges to apples`
+	var input []tokenizer.EncodeInput
+	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence1)))
+	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence2)))
+	encodings, err := tk.EncodeBatch(input, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Find max length of token Ids from slice of encodings
+	var maxLen int = 0
+	for _, en := range encodings {
+		if len(en.Ids) > maxLen {
+			maxLen = len(en.Ids)
+		}
+	}
+
+	var tensors []ts.Tensor
+	for _, en := range encodings {
+		var tokInput []int64 = make([]int64, maxLen)
+		for i := 0; i < len(en.Ids); i++ {
+			tokInput[i] = int64(en.Ids[i])
+		}
+
+		tensors = append(tensors, ts.TensorFrom(tokInput))
+	}
+
+	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
+
+	var (
+		output                         ts.Tensor
+		allHiddenStates, allAttentions []ts.Tensor
+	)
+
+	ts.NoGrad(func() {
+		output, allHiddenStates, allAttentions = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, false)
+	})
+
+	fmt.Printf("output size: %v\n", output.MustSize())
+	gotOuputSize := output.MustSize()
+	wantOuputSize := []int64{2, 11, 4}
+	if !reflect.DeepEqual(wantOuputSize, gotOuputSize) {
+		t.Errorf("Want: %v\n", wantOuputSize)
+		t.Errorf("Got: %v\n", gotOuputSize)
+	}
+
+	numHiddenLayers := int(config.NumHiddenLayers)
+
+	if !reflect.DeepEqual(numHiddenLayers, len(allHiddenStates)) {
+		t.Errorf("Want num of allHiddenStates: %v\n", numHiddenLayers)
+		t.Errorf("Got num of allHiddenStates: %v\n", len(allHiddenStates))
+	}
+
+	if !reflect.DeepEqual(numHiddenLayers, len(allAttentions)) {
+		t.Errorf("Want num of allAttentions: %v\n", numHiddenLayers)
+		t.Errorf("Got num of allAttentions: %v\n", len(allAttentions))
+	}
+}
+
+func TestBertForQuestionAnswering(t *testing.T) {
+	device := gotch.CPU
+	vs := nn.NewVarStore(device)
+
+	config := bert.ConfigFromFile("../data/bert/config.json")
+
+	config.OutputAttentions = true
+	config.OutputHiddenStates = true
+	model := bert.NewForBertQuestionAnswering(vs.Root(), config)
+	tk := getBertTokenizer()
+
+	// Define input
+	sentence1 := "Looks like one thing is missing"
+	sentence2 := `It's like comparing oranges to apples`
+	var input []tokenizer.EncodeInput
+	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence1)))
+	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence2)))
+	encodings, err := tk.EncodeBatch(input, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Find max length of token Ids from slice of encodings
+	var maxLen int = 0
+	for _, en := range encodings {
+		if len(en.Ids) > maxLen {
+			maxLen = len(en.Ids)
+		}
+	}
+
+	var tensors []ts.Tensor
+	for _, en := range encodings {
+		var tokInput []int64 = make([]int64, maxLen)
+		for i := 0; i < len(en.Ids); i++ {
+			tokInput[i] = int64(en.Ids[i])
+		}
+
+		tensors = append(tensors, ts.TensorFrom(tokInput))
+	}
+
+	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
+
+	var (
+		startScores, endScores         ts.Tensor
+		allHiddenStates, allAttentions []ts.Tensor
+	)
+
+	ts.NoGrad(func() {
+		startScores, endScores, allHiddenStates, allAttentions = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, false)
+	})
+
+	gotStartScoresSize := startScores.MustSize()
+	wantStartScoresSize := []int64{2, 11}
+	if !reflect.DeepEqual(wantStartScoresSize, gotStartScoresSize) {
+		t.Errorf("Want: %v\n", wantStartScoresSize)
+		t.Errorf("Got: %v\n", gotStartScoresSize)
+	}
+
+	gotEndScoresSize := endScores.MustSize()
+	wantEndScoresSize := []int64{2, 11}
+	if !reflect.DeepEqual(wantEndScoresSize, gotEndScoresSize) {
+		t.Errorf("Want: %v\n", wantEndScoresSize)
+		t.Errorf("Got: %v\n", gotEndScoresSize)
+	}
+
+	numHiddenLayers := int(config.NumHiddenLayers)
+
+	if !reflect.DeepEqual(numHiddenLayers, len(allHiddenStates)) {
+		t.Errorf("Want num of allHiddenStates: %v\n", numHiddenLayers)
+		t.Errorf("Got num of allHiddenStates: %v\n", len(allHiddenStates))
+	}
+
+	if !reflect.DeepEqual(numHiddenLayers, len(allAttentions)) {
+		t.Errorf("Want num of allAttentions: %v\n", numHiddenLayers)
+		t.Errorf("Got num of allAttentions: %v\n", len(allAttentions))
+	}
+}
