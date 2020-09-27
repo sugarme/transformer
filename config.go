@@ -1,8 +1,15 @@
 package transformer
 
 import (
+	"encoding/json"
 	"fmt"
-	"reflect"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"regexp"
+	"strings"
+	// "reflect"
 )
 
 // PretrainedConfig is a base for all configurations.
@@ -16,7 +23,6 @@ type Config struct {
 // NewConfig creates Config from input config.
 // Default values will be assigned if config Params are not provided.
 func NewConfig(config map[string]interface{}) *Config {
-
 	var configMap map[string]interface{} = make(map[string]interface{})
 	defaultValues := map[string]interface{}{
 		"returnDict":         false,
@@ -138,27 +144,115 @@ func (c *Config) SetNumLabels(numLabels int) {
 // ================================
 
 func ConfigFromPretrained(pretrainedModelNameOrPath string, customParams map[string]interface{}) *Config {
-
-	// TODO: implement this
-	return nil
+	configMap, params := GetConfigMap(pretrainedModelNameOrPath, customParams)
+	return ConfigFromMap(configMap, params)
 }
 
-func GetConfigDict(pretrainedModelNameOrPath string, customParams map[string]interface{}) (retVal1, retVal2 map[string]interface{}) {
+func GetConfigMap(pretrainedModelNameOrPath string, customParams map[string]interface{}) (retVal1, retVal2 map[string]interface{}) {
+	params := map[string]interface{}{
+		"cacheDir":       "",
+		"resumeDownload": false,
+		"proxies":        nil,
+		"localFilesOnly": false,
+	}
+	for k, v := range customParams {
+		if _, ok := params[k]; ok {
+			params[k] = v
+		}
+	}
 
-	// TODO: implement this
-	return
+	var configFile string
+	// 1. If file is local file name or directory
+	if fi, err := os.Stat(pretrainedModelNameOrPath); err == nil {
+		switch mode := fi.Mode(); {
+		case mode.IsDir():
+			configFile = fmt.Sprintf("%s/%s", pretrainedModelNameOrPath, ConfigName)
+		case mode.IsRegular():
+			configFile = pretrainedModelNameOrPath
+		}
+	} else {
+		// 2. If file is remote URL
+		if _, err := http.Get(pretrainedModelNameOrPath); err == nil {
+			configFile = pretrainedModelNameOrPath
+		}
+	}
+
+	resolvedConfigFile, err := cachedPath(configFile, params)
+	if err != nil {
+		log.Fatal(err)
+	}
+	configMap := mapFromJSON(resolvedConfigFile)
+	// return configMap, params
+	return configMap, customParams
+
 }
 
-func ConfigFromDict(config map[string]interface{}, customParams map[string]interface{}) *Config {
+func mapFromJSON(file string) map[string]interface{} {
+	jsonFile, err := os.Open(file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer jsonFile.Close()
 
-	// TODO: implement this
-	return nil
+	buff, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	configMap := make(map[string]interface{})
+	err = json.Unmarshal(buff, &configMap)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// `snake` to `camel`-case key name
+	retMap := make(map[string]interface{})
+	for k, v := range configMap {
+		key := toCamelCase(k)
+		retMap[key] = v
+	}
+
+	return retMap
+}
+
+func toCamelCase(str string) string {
+	var link = regexp.MustCompile("(^[A-Za-z])|_([A-Za-z])")
+
+	camel := link.ReplaceAllStringFunc(str, func(s string) string {
+		return strings.ToUpper(strings.Replace(s, "_", "", -1))
+	})
+
+	return strings.ToLower(string(camel[0])) + camel[1:]
+}
+
+func toSnakeCase(str string) string {
+	var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
+}
+
+func ConfigFromMap(config map[string]interface{}, customParams map[string]interface{}) *Config {
+	for k, v := range customParams {
+		if _, ok := config[k]; ok {
+			config[k] = v
+		} else {
+			config[k] = v
+		}
+	}
+	return &Config{
+		ModelType: "",
+		Params:    config,
+	}
 }
 
 func ConfigFromJSON(file string) *Config {
-
-	// TODO: implement this
-	return nil
+	configMap := mapFromJSON(file)
+	return &Config{
+		ModelType: "",
+		Params:    configMap,
+	}
 }
 
 // TODO: implement these methods:
@@ -168,19 +262,17 @@ func (c *Config) SavePretrained(path string) {
 	// TODO: implement
 }
 
-func (c *Config) ToDiffDict() map[string]interface{} {
+func (c *Config) ToDiffMap() map[string]interface{} {
 
 	// TODO: implement this
 	return nil
 }
 
-func (c *Config) ToDict() map[string]interface{} {
-
+func (c *Config) ToMap() map[string]interface{} {
 	return c.Params
 }
 
 func (c *Config) ToJSON() string {
-
 	// TODO: implement this
 	return ""
 }
@@ -192,21 +284,4 @@ func (c *Config) ToJSONFile(file string) {
 func (c *Config) Update(config map[string]interface{}) {
 
 	// TODO: implement this
-}
-
-var AllPretrainedConfigArchiveMap map[string]interface{} = make(map[string]interface{})
-
-// TODO: update this map
-
-var ConfigMapping map[string]reflect.Type = map[string]reflect.Type{
-	// "retribert": RetriBertConfig,
-	// "t5":        T5Config,
-	// "bert": reflect.TypeOf(bert.BertConfig),
-}
-
-var ModelNamesMapping map[string]string = map[string]string{
-	"retribert": "RetriBERT",
-	"t5":        "T5",
-	// TODO: update this
-	"bert": "BERT",
 }
