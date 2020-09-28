@@ -28,7 +28,6 @@ func NewBertConfig(customParams map[string]interface{}) *transformer.Config {
 
 	if customParams != nil {
 		fmt.Printf("customParams: %+v\n", customParams)
-		// bertParams = transformer.AddParams(customParams, defaultValues)
 		bertParams = transformer.AddParams(customParams, defaultValues)
 	}
 
