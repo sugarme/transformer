@@ -1,28 +1,17 @@
-package transformer
+package util
 
 import (
 	"fmt"
 	"io"
 	"log"
-	"path"
-	"strings"
-
-	// "path/filepath"
 	"net/http"
 	"os"
+	"path"
+	"strings"
 )
 
-// cachedPath resolves path given an input either a URL or a local path.
-// If it is a URL, download file and cache it, then return path to the cached file.
-// If it's already a local path, make sure the file exists and then return the path.
-/* func cachedPath(urlOrFilename string, cacheDir string, forceDownload bool, proxies []interface{}, resumeDownload bool, userAgent []interface{}, extractCompressedFile bool, localFilesOnly bool) (resolvedPath string, ok bool) {
- *
- *   // TODO: implement this
- *   return
- * } */
-
 const (
-	WeightName = "model.gt"
+	WeightName = "model.gt" // atm, just use extension name `.ot`
 	ConfigName = "config.json"
 
 	S3BucketPrefix          = "https://s3.amazonaws.com/models.huggingface.co/bert"
@@ -61,112 +50,58 @@ func init() {
 	}
 }
 
-func cachedPath(urlOrFilename string, opts map[string]interface{}) (resolvedPath string, err error) {
+// CachedPath resolves and caches data based on input string, then returns fullpath to the cached data.
+//
+// Parameters:
+// - `urlOrFilename`: can be either `URL` to remote file or fullpath a local file.
+//
+// CachedPath does several things consequently:
+// 1. Resolves input string to a  fullpath cached filename candidate.
+// 2. Check it at `CachePath`, if exists, then return the candidate. If not
+// 3. Retrieves and Caches data to `CachePath` and returns path to cached data
+func CachedPath(urlOrFilename string) (resolvedPath string, err error) {
 
-	// Default values
-	params := map[string]interface{}{
-		"cacheDir":              "",
-		"forcedDownload":        false,
-		"proxies":               nil,
-		"resumeDownload":        false,
-		"userAgent":             nil,
-		"extractCompressedFile": false,
-		"forceExtract":          false,
-		"localFilesOnly":        false,
+	// 1. Resolves to "candidate" filename at `CachePath`
+	filename := path.Base(urlOrFilename)
+	cachedFileCandidate := fmt.Sprintf("%s/%v", TransformersCache, filename)
+
+	// 1. Cached candidate exists
+	// if _, err := os.Stat(cachedFileCandidate); os.IsExist(err) {
+	if _, err := os.Stat(cachedFileCandidate); err == nil {
+		return cachedFileCandidate, nil
 	}
 
-	// Update with custom values
-	for k, v := range opts {
-		if _, ok := params[k]; ok {
-			params[k] = v
+	// 2. If valid fullpath to local file, caches it and return cached filename
+	if _, err := os.Stat(urlOrFilename); err == nil {
+		err := copyFile(urlOrFilename, cachedFileCandidate)
+		if err != nil {
+			return "", err
+		}
+		return cachedFileCandidate, nil
+	}
+
+	// 3. If a valid URL, download it to `CachePath`
+	if isValidURL(urlOrFilename) {
+		if _, err := http.Get(urlOrFilename); err == nil {
+			err := downloadFile(urlOrFilename, cachedFileCandidate)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			err = fmt.Errorf("Unable to parse '%v' as a URL or as a local path.\n", urlOrFilename)
+			return "", err
 		}
 	}
 
-	var (
-		outputPath string
-	)
-	if val, _ := params["cacheDir"]; val == "" {
-		params["cacheDir"] = TransformersCache
-	}
-
-	// 1. If filename, just return it if existing, otherwise throw error
-	if _, err := os.Stat(urlOrFilename); err == nil {
-		return urlOrFilename, nil
-	} else if _, err := http.Get(urlOrFilename); err == nil {
-		// URL, so get it from the cache (downloading if necessary)
-		outputPath = getFromCache(urlOrFilename, params)
-	} else {
-		err = fmt.Errorf("Unable to parse '%v' as a URL or as a local path.\n", urlOrFilename)
-		return "", err
-	}
-
-	if !params["extractCompressedFile"].(bool) {
-		return outputPath, nil
-	}
-
-	// TODO: do extract `.zip` or `.tar` file
-	return outputPath, nil
+	// Not resolves
+	err = fmt.Errorf("Unable to parse '%v' as a URL or as a local path.\n", urlOrFilename)
+	return "", err
 }
 
-func getFromCache(url string, opts map[string]interface{}) string {
+func isValidURL(url string) bool {
 
-	// Default values
-	params := map[string]interface{}{
-		"cacheDir":              "",
-		"forcedDownload":        false,
-		"proxies":               nil,
-		"resumeDownload":        false,
-		"userAgent":             nil,
-		"extractCompressedFile": false,
-		"forceExtract":          false,
-		"localFilesOnly":        false,
-	}
-
-	// Update with custom values
-	for k, v := range opts {
-		if _, ok := params[k]; ok {
-			params[k] = v
-		}
-	}
-
-	if val, _ := params["cacheDir"]; val == "" {
-		params["cacheDir"] = TransformersCache
-	}
-
-	if _, err := os.Stat(params["cacheDir"].(string)); os.IsNotExist(err) {
-		// Does not exist. Create path
-		if err := os.Mkdir(params["cacheDir"].(string), 0755); os.IsExist(err) {
-			log.Fatal(err)
-		}
-	}
-
-	filename := path.Base(url)
-	// get cache path to put the file
-	cachePath := fmt.Sprintf("%s/%s", params["cacheDir"].(string), filename)
-
-	// If cachePath exists (meaning its cached) or `localFilesOnly`== true
-	// just return cachePath
-	localFilesOnly, _ := params["localFilesOnly"].(bool)
-	var isCached bool = false
-	if _, err := os.Stat(cachePath); err == nil {
-		isCached = true
-	}
-	if localFilesOnly || isCached {
-		fmt.Printf("cached file found.\n")
-		return cachePath
-	}
-
-	// Otherwise, download file from URL
-	err := downloadFile(url, cachePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if params["resumeDownload"].(bool) {
-		// TODO: do resume if incomplete
-	}
-
-	return cachePath
+	// TODO: implement
+	return false
 }
 
 // downloadFile downloads file from URL and stores it in local filepath.
@@ -246,4 +181,29 @@ func byteCountIEC(b uint64) string {
 	}
 	return fmt.Sprintf("%.1f %ciB",
 		float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func copyFile(src, dst string) error {
+	sourceFileStat, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if !sourceFileStat.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file", src)
+	}
+
+	source, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	destination, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destination.Close()
+	_, err = io.Copy(destination, source)
+	return err
 }
