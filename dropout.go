@@ -1,4 +1,4 @@
-package common
+package transformer
 
 import (
 	ts "github.com/sugarme/gotch/tensor"

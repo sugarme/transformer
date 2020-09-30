@@ -1,4 +1,4 @@
-package common
+package transformer
 
 import (
 	"github.com/sugarme/gotch/nn"

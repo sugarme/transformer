@@ -9,10 +9,11 @@ import (
 )
 
 func ExampleLoadConfig() {
-	// url := "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json"
-	localFile := "bert-base-uncased-config.json"
+	// modelNameOrPath := "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json"
+	// modelNameOrPath := "bert-base-uncased"
+	modelNameOrPath := "bert-base-uncased-config.json"
 	var config bert.BertConfig
-	err := transformer.LoadConfig(&config, localFile, nil)
+	err := transformer.LoadConfig(&config, modelNameOrPath, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

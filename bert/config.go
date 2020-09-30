@@ -9,34 +9,9 @@ import (
 	"path/filepath"
 	"reflect"
 
+	"github.com/sugarme/transformer/pretrained"
 	"github.com/sugarme/transformer/util"
 )
-
-// Map model name to url
-var configMap map[string]string = map[string]string{
-	"bert-base-uncased":                                     "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json",
-	"bert-large-uncased":                                    "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-config.json",
-	"bert-base-cased":                                       "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-config.json",
-	"bert-large-cased":                                      "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-config.json",
-	"bert-base-multilingual-uncased":                        "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-config.json",
-	"bert-base-multilingual-cased":                          "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-config.json",
-	"bert-base-chinese":                                     "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-config.json",
-	"bert-base-german-cased":                                "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-config.json",
-	"bert-large-uncased-whole-word-masking":                 "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-config.json",
-	"bert-large-cased-whole-word-masking":                   "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-config.json",
-	"bert-large-uncased-whole-word-masking-finetuned-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-config.json",
-	"bert-large-cased-whole-word-masking-finetuned-squad":   "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-config.json",
-	"bert-base-cased-finetuned-mrpc":                        "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-config.json",
-	"bert-base-german-dbmdz-cased":                          "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-config.json",
-	"bert-base-german-dbmdz-uncased":                        "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-config.json",
-	"cl-tohoku/bert-base-japanese":                          "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese/config.json",
-	"cl-tohoku/bert-base-japanese-whole-word-masking":       "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking/config.json",
-	"cl-tohoku/bert-base-japanese-char":                     "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char/config.json",
-	"cl-tohoku/bert-base-japanese-char-whole-word-masking":  "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking/config.json",
-	"TurkuNLP/bert-base-finnish-cased-v1":                   "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/config.json",
-	"TurkuNLP/bert-base-finnish-uncased-v1":                 "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/config.json",
-	"wietsedv/bert-base-dutch-cased":                        "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/config.json",
-}
 
 // BertConfig defines the BERT model architecture (i.e., number of layers,
 // hidden layer size, label mapping...)
@@ -58,6 +33,38 @@ type BertConfig struct {
 	Id2Label                  map[int64]string `json:"id_2_label"`
 	Label2Id                  map[string]int64 `json:"label_2_id"`
 	NumLabels                 int64            `json:"num_labels"`
+}
+
+// NewBertConfig initiates BertConfig with given input parameters or default values.
+func NewConfig(customParams map[string]interface{}) *BertConfig {
+	defaultValues := map[string]interface{}{
+		"VocabSize":                int64(30522),
+		"HiddenSize":               int64(768),
+		"NumHiddenLayers":          int64(12),
+		"NumAttentionHeads":        int64(12),
+		"IntermediateSize":         int64(3072),
+		"HiddenAct":                "gelu",
+		"HiddenDropoutProb":        float64(0.1),
+		"AttentionProbDropoutProb": float64(0.1),
+		"MaxPositionEmbeddings":    int64(512),
+		"TypeVocabSize":            int64(2),
+		"InitializerRange":         float32(0.02),
+		"LayerNormEps":             1e-12, // not applied yet
+		"PadTokenId":               0,     // not applied yet
+		"GradientCheckpointing":    false, // not applied yet
+	}
+
+	params := defaultValues
+	for k, v := range customParams {
+		if _, ok := params[k]; ok {
+			params[k] = v
+		}
+	}
+
+	config := new(BertConfig)
+	config.updateParams(params)
+
+	return config
 }
 
 func ConfigFromFile(filename string) (*BertConfig, error) {
@@ -88,12 +95,12 @@ func ConfigFromFile(filename string) (*BertConfig, error) {
 
 // Load loads model configuration from file or model name. It also updates
 // default configuration parameters if provided.
-// This method implements `PretrainedConfig` interface.
+// This method implements `pretrained.Config` interface.
 func (c *BertConfig) Load(modelNameOrPath string, params map[string]interface{}) error {
 
 	var urlOrFilename string
 	// If modelName, infer to default configuration filename:
-	if configFile, ok := configMap[modelNameOrPath]; ok {
+	if configFile, ok := pretrained.BertConfigs[modelNameOrPath]; ok {
 		urlOrFilename = configFile
 	} else {
 		// Otherwise, just take the input

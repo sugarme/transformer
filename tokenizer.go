@@ -1,14 +1,13 @@
 package transformer
 
 import (
-	"github.com/sugarme/gotch"
 	"github.com/sugarme/transformer/pretrained"
 )
 
-// LoadConfig loads pretrained model data from local or remote file.
+// LoadTokenizer loads pretrained tokenizer from local or remote file.
 //
 // Parameters:
-// - `model` pretrained Model (any model type that implements pretrained `Model` interface)
+// - `tk` pretrained.Tokenizer (any tokenizer model that implements pretrained `Tokenizer` interface)
 // - `modelNameOrPath` is a string of either
 //		+ Model name or
 // 		+ File name or path or
@@ -16,7 +15,7 @@ import (
 // If `modelNameOrPath` is resolved, function will cache data using `TransformerCache`
 // environment if existing, otherwise it will be cached in `$HOME/.cache/transformers/` directory.
 // If `modleNameOrPath` is valid URL, file will be downloaded and cached.
-// Finally, model weights will be loaded to `varstore`.
-func LoadModel(model pretrained.Model, modelNameOrPath string, config pretrained.Config, customParams map[string]interface{}, device gotch.Device) error {
-	return model.Load(modelNameOrPath, config, customParams, device)
+// Finally, vocab data will be loaded to `tk`.
+func LoadTokenizer(tk pretrained.Tokenizer, modelNameOrPath string, customParams map[string]interface{}) error {
+	return tk.Load(modelNameOrPath, customParams)
 }

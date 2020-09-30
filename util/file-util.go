@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	WeightName = "model.gt" // atm, just use extension name `.ot`
+	WeightName = "model.gt"
 	ConfigName = "config.json"
 
 	S3BucketPrefix          = "https://s3.amazonaws.com/models.huggingface.co/bert"
@@ -63,6 +63,11 @@ func CachedPath(urlOrFilename string) (resolvedPath string, err error) {
 
 	// 1. Resolves to "candidate" filename at `CachePath`
 	filename := path.Base(urlOrFilename)
+	// strip prefix so that it consistents with config and vocab file.
+	if strings.HasSuffix(filename, "-rust_model.ot") {
+		filename = strings.Replace(filename, "-rust_model.ot", "-model.gt", 1)
+	}
+
 	cachedFileCandidate := fmt.Sprintf("%s/%v", TransformersCache, filename)
 
 	// 1. Cached candidate exists
@@ -87,7 +92,10 @@ func CachedPath(urlOrFilename string) (resolvedPath string, err error) {
 			if err != nil {
 				return "", err
 			}
+
+			return cachedFileCandidate, nil
 		} else {
+			fmt.Printf("Error: %v\n", err)
 			err = fmt.Errorf("Unable to parse '%v' as a URL or as a local path.\n", urlOrFilename)
 			return "", err
 		}
@@ -101,7 +109,7 @@ func CachedPath(urlOrFilename string) (resolvedPath string, err error) {
 func isValidURL(url string) bool {
 
 	// TODO: implement
-	return false
+	return true
 }
 
 // downloadFile downloads file from URL and stores it in local filepath.
