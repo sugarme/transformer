@@ -108,6 +108,8 @@ github.com/sugarme/tokenizer v0.0.0-20200920074224-e1277f7488cc h1:XBWUWMasORhmp
 github.com/sugarme/tokenizer v0.0.0-20200920074224-e1277f7488cc/go.mod h1:mkypAc0rOi4EDcKuuJTdbPJOk8QMMZABaJRNs1M1OeU=
 github.com/sugarme/tokenizer v0.0.0-20200921031837-cb1deb979138 h1:71vkLzYfULy7izUavF8+vzlZFZjYwa8QNNdy5GPXr7A=
 github.com/sugarme/tokenizer v0.0.0-20200921031837-cb1deb979138/go.mod h1:mkypAc0rOi4EDcKuuJTdbPJOk8QMMZABaJRNs1M1OeU=
+github.com/sugarme/tokenizer v0.0.0-20200930080132-dbbba9ea4756 h1:zPZePVVB2+NiDDqtII00+BQ+MqTJpCt6HBqmtbGBUmA=
+github.com/sugarme/tokenizer v0.0.0-20200930080132-dbbba9ea4756/go.mod h1:mkypAc0rOi4EDcKuuJTdbPJOk8QMMZABaJRNs1M1OeU=
 github.com/xtgo/set v1.0.0 h1:6BCNBRv3ORNDQ7fyoJXRv+tstJz3m1JVFQErfeZz2pY=
 github.com/xtgo/set v1.0.0/go.mod h1:d3NHzGzSa0NmB2NhFyECA+QdRp29oEn2xbT+TpeFoM8=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
