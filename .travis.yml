@@ -1,0 +1,30 @@
+language: go
+
+go:
+  - 1.14.x
+
+env:
+  - GO111MODULE=on
+
+branches:
+  only:
+    - master
+
+dist: bionic
+
+before_install:
+  - sudo apt-get install clang-tools-9
+  - wget -O /tmp/libtorch-cxx11-abi-shared-with-deps-1.5.1+cpu.zip https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.5.1%2Bcpu.zip
+  - unzip /tmp/libtorch-cxx11-abi-shared-with-deps-1.5.1+cpu.zip -d /opt
+  - export LIBTORCH=/opt/libtorch
+  - export LD_LIBRARY_PATH=${LIBTORCH}/lib:$LD_LIBRARY_PATH
+  - printenv
+  - ls
+  - rm libtch/dummy_cuda_dependency.cpp
+  - mv libtch/fake_cuda_dependency.cpp.cpu libtch/fake_cuda_dependency.cpp
+  - rm libtch/lib.go
+  - mv libtch/lib.go.cpu libtch/lib.go
+script:
+  - go get -u ./...
+  - go test -v github.com/sugarme/transformer
+  - go test -v github.com/sugarme/transformer/bert
