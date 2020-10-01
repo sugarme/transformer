@@ -10,7 +10,7 @@ import (
 	"github.com/sugarme/transformer/util"
 )
 
-// BertEmbedding defines interface for BertModel or RoBertaModel
+// BertEmbedding defines interface for BertModel or RoBertaModel.
 type BertEmbedding interface {
 	ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (ts.Tensor, error)
 }
