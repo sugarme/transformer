@@ -13,6 +13,7 @@ import (
 // It also implements `BertEmbedding` interface for Roberta models.
 type RobertaEmbeddings struct {
 	wordEmbeddings      *nn.Embedding
+	positionEmbeddings  *nn.Embedding
 	tokenTypeEmbeddings *nn.Embedding
 	layerNorm           *nn.LayerNorm
 	dropout             *util.Dropout
@@ -46,7 +47,45 @@ func (re *RobertaEmbeddings) createPositionIdsFromEmbeddings(x ts.Tensor) ts.Ten
 // 	- `config` - `BertConfig` object defining the model architecture and vocab/hidden size.
 func NewRobertaEmbeddings(p nn.Path, config *bert.BertConfig) *RobertaEmbeddings {
 
-	// TODO: implement it
+	embeddingConfig := nn.DefaultEmbeddingConfig()
+	embeddingConfig.PaddingIdx = 1
 
-	return &RobertaEmbeddings{}
+	wordEmbeddings := nn.NewEmbedding(p.Sub("word_embeddings"), config.VocabSize, config.HiddenSize, embeddingConfig)
+	positionEmbeddings := nn.NewEmbedding(p.Sub("position_embeddings"), config.MaxPositionEmbeddings, config.HiddenSize, nn.DefaultEmbeddingConfig())
+	tokenTypeEmbeddings := nn.NewEmbedding(p.Sub("token_type_embeddings"), config.TypeVocabSize, config.HiddenSize, nn.DefaultEmbeddingConfig())
+
+	layerNormConfig := nn.DefaultLayerNormConfig()
+	layerNormConfig.Eps = 1e-12
+	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int64{config.HiddenSize}, layerNormConfig)
+	dropout := util.NewDropout(config.HiddenDropoutProb)
+
+	return &RobertaEmbeddings{
+		wordEmbeddings:      &wordEmbeddings,
+		positionEmbeddings:  &positionEmbeddings,
+		tokenTypeEmbeddings: &tokenTypeEmbeddings,
+		layerNorm:           &layerNorm,
+		dropout:             dropout,
+	}
+}
+
+// ForwardT forwards pass through the embedding layer.
+// This differs from the original BERT embeddings in how the position ids are calculated when not provided.
+//
+// Params:
+// 	- `inputIds` - Optional input tensor of shape (batch size, sequence length).
+// 		If None, pre-computed embeddings must be provided (see `inputEmbeds`)
+// 	- `tokenTypeIds` -Optional segment id of shape (batch size, sequence length).
+// 		Convention is value of 0 for the first sentence (incl. [SEP]) and 1 for the second sentence. If None set to 0.
+// 	- `positionIds` - Optional position ids of shape (batch size, sequence length).
+// 		If None, will be incremented from 0.
+// 	- `inputEmbeds` - Optional pre-computed input embeddings of shape (batch size, sequence length, hidden size).
+// 		If None, input ids must be provided (see `inputIds`)
+// 	- `train` - boolean flag to turn on/off the dropout layers in the model.
+//		Should be set to false for inference.
+//
+// Returns:
+// 	- `embeddedOutput` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*)
+func (re *RobertaEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (ts.Tensor, string) {
+
+	panic("not implemented yet")
 }
