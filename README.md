@@ -4,7 +4,7 @@
 
 `transformer` is pure Go package to facilitate applying Natural Language Processing (NLP) models train/test and inference in Go. 
 
-This package is in active mode of building and there are many change ahead. Hence you can use it with your complete own risk. The package will be considered as stable when version 1.0 is released. 
+This package is in active mode of building and there are many changes ahead. Hence you can use it with your complete own risk. The package will be considered as stable when version 1.0 is released. 
 
 `transformer` is heavily inspired by and based on the popular [Python HuggingFace Transformers](https://github.com/huggingface/transformers). It's also influenced by [Rust version - rust-bert](https://github.com/guillaume-be/rust-bert). In fact, all pre-trained models for Rust are compatible to import to this Go `transformer` package as both `rust-bert`'s dependency Pytorch Rust binding - [**`tch-rs`**](https://github.com/LaurentMazare/tch-rs) and Go binding [**`gotch`**](https://github.com/sugarme/gotch) are built with similar principles. 
 
@@ -12,14 +12,14 @@ This package is in active mode of building and there are many change ahead. Henc
 
 ## Dependencies
 
-2 main dependency are:
+2 main dependencies are:
 
 - `tokenizer`
 - `gotch`
 
 ## Prerequisites and installation
 
-- As this package depends on `gotch` which is a Pytorch C++ API binding for Go, a pre-compiled Libtorch copy (CPU or GPU) should be installed in your machine. Please follow [gotch](https://github.com/sugarme/gotch) installation instruction for detail. 
+- As this package depends on `gotch` which is a Pytorch C++ API binding for Go, a pre-compiled Libtorch copy (CPU or GPU) should be installed in your machine. Please see [gotch](https://github.com/sugarme/gotch) installation instruction for detail. 
 - Install package: `go get -u github.com/sugarme/transformer`
 
 ## Basic example
