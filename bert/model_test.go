@@ -14,13 +14,12 @@ import (
 	"github.com/sugarme/tokenizer/normalizer"
 	"github.com/sugarme/tokenizer/pretokenizer"
 	"github.com/sugarme/tokenizer/processor"
+
 	"github.com/sugarme/transformer/bert"
 )
 
 func getBertTokenizer() (retVal *tokenizer.Tokenizer) {
-
 	vocabFile := "../data/bert/vocab.txt"
-
 	model, err := wordpiece.NewWordPieceFromFile(vocabFile, "[UNK]")
 	if err != nil {
 		log.Fatal(err)
@@ -58,15 +57,20 @@ func getBertTokenizer() (retVal *tokenizer.Tokenizer) {
 }
 
 func TestBertForMaskedLM(t *testing.T) {
-
-	device := gotch.CPU
-	vs := nn.NewVarStore(device)
-
-	config := bert.ConfigFromFile("../data/bert/config.json")
-	model := bert.NewBertForMaskedLM(vs.Root(), config)
-	err := vs.Load("../data/bert/model.ot")
+	// Config
+	config := new(bert.BertConfig)
+	err := config.Load("../data/bert/config.json", nil)
 	if err != nil {
-		log.Fatalf("Load model weight error: \n%v", err)
+		log.Fatal(err)
+	}
+
+	// Model
+	device := gotch.CPU
+
+	model := new(bert.BertForMaskedLM)
+	err = model.Load("../data/bert/model.ot", config, nil, device)
+	if err != nil {
+		t.Error(err)
 	}
 
 	tk := getBertTokenizer()
@@ -136,7 +140,10 @@ func TestBertForSequenceClassification(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../data/bert/config.json")
+	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	if err != nil {
+		t.Error(err)
+	}
 
 	var dummyLabelMap map[int64]string = make(map[int64]string)
 	dummyLabelMap[0] = "positive"
@@ -214,7 +221,10 @@ func TestBertForMultipleChoice(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../data/bert/config.json")
+	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	if err != nil {
+		t.Error(err)
+	}
 
 	config.OutputAttentions = true
 	config.OutputHiddenStates = true
@@ -286,7 +296,10 @@ func TestBertForTokenClassification(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../data/bert/config.json")
+	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	if err != nil {
+		t.Error(err)
+	}
 
 	var dummyLabelMap map[int64]string = make(map[int64]string)
 	dummyLabelMap[0] = "O"
@@ -365,7 +378,10 @@ func TestBertForQuestionAnswering(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../data/bert/config.json")
+	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	if err != nil {
+		t.Error(err)
+	}
 
 	config.OutputAttentions = true
 	config.OutputHiddenStates = true

@@ -3,9 +3,8 @@ package bert
 import (
 	"fmt"
 
-	ts "github.com/sugarme/gotch/tensor"
-
 	"github.com/sugarme/gotch/nn"
+	ts "github.com/sugarme/gotch/tensor"
 )
 
 // `BertLayer`:
@@ -13,19 +12,19 @@ import (
 
 // BertLayer defines a layer in BERT encoder
 type BertLayer struct {
-	Attention      BertAttention
+	Attention      *BertAttention
 	IsDecoder      bool
-	CrossAttention BertAttention
-	Intermediate   BertIntermediate
-	Output         BertOutput
+	CrossAttention *BertAttention
+	Intermediate   *BertIntermediate
+	Output         *BertOutput
 }
 
-func NewBertLayer(p nn.Path, config BertConfig) (retVal BertLayer) {
+func NewBertLayer(p nn.Path, config *BertConfig) *BertLayer {
 	path := p.Sub("attention")
 	attention := NewBertAttention(path, config)
 	var (
 		isDecoder      bool = false
-		crossAttention BertAttention
+		crossAttention *BertAttention
 	)
 
 	if config.IsDecoder {
@@ -39,10 +38,10 @@ func NewBertLayer(p nn.Path, config BertConfig) (retVal BertLayer) {
 	outputPath := p.Sub("output")
 	output := NewBertOutput(outputPath, config)
 
-	return BertLayer{attention, isDecoder, crossAttention, intermediate, output}
+	return &BertLayer{attention, isDecoder, crossAttention, intermediate, output}
 }
 
-func (bl BertLayer) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt1, retValOpt2 ts.Tensor) {
+func (bl *BertLayer) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt1, retValOpt2 ts.Tensor) {
 	var (
 		attentionOutput       ts.Tensor
 		attentionWeights      ts.Tensor
@@ -77,7 +76,7 @@ type BertEncoder struct {
 	Layers             []BertLayer
 }
 
-func NewBertEncoder(p nn.Path, config BertConfig) (retVal BertEncoder) {
+func NewBertEncoder(p nn.Path, config *BertConfig) *BertEncoder {
 	path := p.Sub("layer")
 	outputAttentions := false
 	if config.OutputAttentions {
@@ -91,15 +90,15 @@ func NewBertEncoder(p nn.Path, config BertConfig) (retVal BertEncoder) {
 
 	var layers []BertLayer
 	for lIdx := 0; lIdx < int(config.NumHiddenLayers); lIdx++ {
-		layers = append(layers, NewBertLayer(path.Sub(fmt.Sprintf("%v", lIdx)), config))
+		layers = append(layers, *NewBertLayer(path.Sub(fmt.Sprintf("%v", lIdx)), config))
 	}
 
-	return BertEncoder{outputAttentions, outputHiddenStates, layers}
+	return &BertEncoder{outputAttentions, outputHiddenStates, layers}
 
 }
 
 // Forward ...
-func (be BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 	var (
 		allHiddenStates, allAttentions []ts.Tensor = nil, nil
 	)
@@ -139,18 +138,18 @@ func (be BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderM
 // BertPooler defines a linear layer which can be applied to the
 // first element of the sequence(`[MASK]` token)
 type BertPooler struct {
-	Lin nn.Linear
+	Lin *nn.Linear
 }
 
-func NewBertPooler(p nn.Path, config BertConfig) (retVal BertPooler) {
+func NewBertPooler(p nn.Path, config *BertConfig) *BertPooler {
 	path := p.Sub("dense")
 	lconfig := nn.DefaultLinearConfig()
 	lin := nn.NewLinear(path, config.HiddenSize, config.HiddenSize, lconfig)
 
-	return BertPooler{lin}
+	return &BertPooler{&lin}
 }
 
-func (bp BertPooler) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
+func (bp *BertPooler) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
 
 	selectTs := hiddenStates.MustSelect(1, 0, false)
 	tmp := selectTs.Apply(bp.Lin)

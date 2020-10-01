@@ -1,66 +1,16 @@
 package bert
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
-	"path/filepath"
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
-	"github.com/sugarme/transformer/common"
+
+	"github.com/sugarme/transformer/pretrained"
+	"github.com/sugarme/transformer/util"
 )
-
-// BertConfig defines the BERT model architecture (i.e., number of layers,
-// hidden layer size, label mapping...)
-type BertConfig struct {
-	HiddenAct                 string           `json:"hidden_act"`
-	AttentionProbsDropoutProb float64          `json:"attention_probs_dropout_prob"`
-	HiddenDropoutProb         float64          `json:"hidden_dropout_prob"`
-	HiddenSize                int64            `json:"hidden_size"`
-	InitializerRange          float32          `json:"initializer_range"`
-	IntermediateSize          int64            `json:"intermediate_size"`
-	MaxPositionEmbeddings     int64            `json:"max_position_embeddings"`
-	NumAttentionHeads         int64            `json:"num_attention_heads"`
-	NumHiddenLayers           int64            `json:"num_hidden_layers"`
-	TypeVocabSize             int64            `json:"type_vocab_size"`
-	VocabSize                 int64            `json:"vocab_size"`
-	OutputAttentions          bool             `json:"output_attentions"`
-	OutputHiddenStates        bool             `json:"output_hidden_states"`
-	IsDecoder                 bool             `json:"is_decoder"`
-	Id2Label                  map[int64]string `json:"id_2_label"`
-	Label2Id                  map[string]int64 `json:"label_2_id"`
-	NumLabels                 int64            `json:"num_labels"`
-}
-
-func ConfigFromFile(filename string) (retVal BertConfig) {
-	filePath, err := filepath.Abs(filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	f, err := os.Open(filePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-
-	buff, err := ioutil.ReadAll(f)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var config BertConfig
-	err = json.Unmarshal(buff, &config)
-	if err != nil {
-		fmt.Println(err)
-		log.Fatalf("Could not parse configuration to BertConfiguration.\n")
-	}
-	return config
-}
 
 // BertModel defines base architecture for BERT models.
 // `Task-specific` models can be built from this base model.
@@ -71,26 +21,26 @@ func ConfigFromFile(filename string) (retVal BertConfig) {
 // `IsDecoder`: whether model is used as a decoder. If set to `true`
 // a casual mask will be applied to hide future positions that should be attended to.
 type BertModel struct {
-	Embeddings BertEmbeddings
-	Encoder    BertEncoder
-	Pooler     BertPooler
+	Embeddings *BertEmbeddings
+	Encoder    *BertEncoder
+	Pooler     *BertPooler
 	IsDecoder  bool
 }
 
 // NewBertModel builds a new `BertModel`
 // * `p` Variable store path for the root of the BERT Model
 // * `config` `BertConfig` configuration for model architecture and decoder status
-func NewBertModel(p nn.Path, config BertConfig) (retVal BertModel) {
+func NewBertModel(p nn.Path, config *BertConfig) *BertModel {
 	isDecoder := false
 	if config.IsDecoder {
 		isDecoder = true
 	}
 
-	embeddings := NewBertEmbedding(p.Sub("embeddings"), config)
+	embeddings := NewBertEmbeddings(p.Sub("embeddings"), config)
 	encoder := NewBertEncoder(p.Sub("encoder"), config)
 	pooler := NewBertPooler(p.Sub("pooler"), config)
 
-	return BertModel{embeddings, encoder, pooler, isDecoder}
+	return &BertModel{embeddings, encoder, pooler, isDecoder}
 }
 
 // ForwardT forwards pass through the model
@@ -112,7 +62,7 @@ func NewBertModel(p nn.Path, config BertConfig) (retVal BertModel) {
 // * `pooledOutput` - `Tensor` of shape (*batch size*, *hiddenSize*)
 // * `hiddenStates` - `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
 // * `attentions` - `[]ts.Tensor` of length *num_hidden_layers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
-func (b BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
+func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
 
 	var (
 		inputShape []int64
@@ -205,24 +155,24 @@ func (b BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbe
 // ============================
 
 type BertPredictionHeadTransform struct {
-	Dense      nn.Linear
-	Activation common.ActivationFn
-	LayerNorm  nn.LayerNorm
+	Dense      *nn.Linear
+	Activation util.ActivationFn
+	LayerNorm  *nn.LayerNorm
 }
 
-func NewBertPredictionHeadTransform(p nn.Path, config BertConfig) (retVal BertPredictionHeadTransform) {
+func NewBertPredictionHeadTransform(p nn.Path, config *BertConfig) *BertPredictionHeadTransform {
 	dense := nn.NewLinear(p.Sub("dense"), config.HiddenSize, config.HiddenSize, nn.DefaultLinearConfig())
-	activation, ok := common.ActivationFnMap[config.HiddenAct]
+	activation, ok := util.ActivationFnMap[config.HiddenAct]
 	if !ok {
 		log.Fatalf("Unsupported activation function - %v\n", config.HiddenAct)
 	}
 
 	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int64{config.HiddenSize}, nn.DefaultLayerNormConfig())
 
-	return BertPredictionHeadTransform{dense, activation, layerNorm}
+	return &BertPredictionHeadTransform{&dense, activation, &layerNorm}
 }
 
-func (bpht BertPredictionHeadTransform) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
+func (bpht *BertPredictionHeadTransform) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
 	tmp1 := hiddenStates.Apply(bpht.Dense)
 	tmp2 := bpht.Activation.Fwd(tmp1)
 	retVal = tmp2.Apply(bpht.LayerNorm)
@@ -236,21 +186,21 @@ func (bpht BertPredictionHeadTransform) Forward(hiddenStates ts.Tensor) (retVal 
 // =====================
 
 type BertLMPredictionHead struct {
-	Transform BertPredictionHeadTransform
-	Decoder   common.LinearNoBias
+	Transform *BertPredictionHeadTransform
+	Decoder   *util.LinearNoBias
 	Bias      ts.Tensor
 }
 
-func NewBertLMPredictionHead(p nn.Path, config BertConfig) (retVal BertLMPredictionHead) {
+func NewBertLMPredictionHead(p nn.Path, config *BertConfig) *BertLMPredictionHead {
 	path := p.Sub("predictions")
 	transform := NewBertPredictionHeadTransform(path.Sub("transform"), config)
-	decoder := common.NewLinearNoBias(path.Sub("decoder"), config.HiddenSize, config.VocabSize, common.DefaultLinearNoBiasConfig())
+	decoder := util.NewLinearNoBias(path.Sub("decoder"), config.HiddenSize, config.VocabSize, util.DefaultLinearNoBiasConfig())
 	bias := path.NewVar("bias", []int64{config.VocabSize}, nn.NewKaimingUniformInit())
 
-	return BertLMPredictionHead{transform, decoder, bias}
+	return &BertLMPredictionHead{transform, decoder, bias}
 }
 
-func (ph BertLMPredictionHead) Forward(hiddenState ts.Tensor) ts.Tensor {
+func (ph *BertLMPredictionHead) Forward(hiddenState ts.Tensor) ts.Tensor {
 	fwTensor := ph.Transform.Forward(hiddenState).Apply(ph.Decoder)
 
 	retVal := fwTensor.MustAdd(ph.Bias, false)
@@ -264,15 +214,45 @@ func (ph BertLMPredictionHead) Forward(hiddenState ts.Tensor) ts.Tensor {
 
 // BertForMaskedLM is BERT for masked language model
 type BertForMaskedLM struct {
-	bert BertModel
-	cls  BertLMPredictionHead
+	bert *BertModel
+	cls  *BertLMPredictionHead
 }
 
-func NewBertForMaskedLM(p nn.Path, config BertConfig) (retVal BertForMaskedLM) {
+func NewBertForMaskedLM(p nn.Path, config *BertConfig) *BertForMaskedLM {
 	bert := NewBertModel(p.Sub("bert"), config)
 	cls := NewBertLMPredictionHead(p.Sub("cls"), config)
 
-	return BertForMaskedLM{bert, cls}
+	return &BertForMaskedLM{bert, cls}
+}
+
+// Load loads model from file or model name. It also updates
+// default configuration parameters if provided.
+// This method implements `PretrainedModel` interface.
+func (mlm *BertForMaskedLM) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+	var urlOrFilename string
+	// If modelName, infer to default configuration filename:
+	if modelFile, ok := pretrained.BertModels[modelNameOrPath]; ok {
+		urlOrFilename = modelFile
+	} else {
+		// Otherwise, just take the input
+		urlOrFilename = modelNameOrPath
+	}
+
+	cachedFile, err := util.CachedPath(urlOrFilename)
+	if err != nil {
+		return err
+	}
+
+	vs := nn.NewVarStore(device)
+	p := vs.Root()
+	mlm.bert = NewBertModel(p.Sub("bert"), config.(*BertConfig))
+	mlm.cls = NewBertLMPredictionHead(p.Sub("cls"), config.(*BertConfig))
+	err = vs.Load(cachedFile)
+	if err != nil {
+		log.Fatalf("Load model weight error: \n%v", err)
+	}
+
+	return nil
 }
 
 // ForwardT forwards pass through the model
@@ -293,7 +273,7 @@ func NewBertForMaskedLM(p nn.Path, config BertConfig) (retVal BertForMaskedLM) {
 // * `output` - `Tensor` of shape (*batch size*, *numLabels*, *vocabSize*)
 // * `hiddenStates` - `[]ts.Tensor` of length *num_hidden_layers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
 // * `attentions` - `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
-func (mlm BertForMaskedLM) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1 ts.Tensor, optRetVal1, optRetVal2 []ts.Tensor) {
+func (mlm *BertForMaskedLM) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1 ts.Tensor, optRetVal1, optRetVal2 []ts.Tensor) {
 
 	hiddenState, _, allHiddenStates, allAttentions, err := mlm.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask, train)
 	if err != nil {
@@ -313,9 +293,9 @@ func (mlm BertForMaskedLM) ForwardT(inputIds, mask, tokenTypeIds, positionIds, i
 // - `bert`: Base BertModel
 // - `classifier`: BERT linear layer for classification
 type BertForSequenceClassification struct {
-	bert       BertModel
-	dropout    common.Dropout
-	classifier nn.Linear
+	bert       *BertModel
+	dropout    *util.Dropout
+	classifier *nn.Linear
 }
 
 // NewBertForSequenceClassification creates a new `BertForSequenceClassification`
@@ -336,17 +316,17 @@ type BertForSequenceClassification struct {
 // bert := NewBertForSequenceClassification(p.Sub("bert"), config)
 //
 // ```
-func NewBertForSequenceClassification(p nn.Path, config BertConfig) BertForSequenceClassification {
+func NewBertForSequenceClassification(p nn.Path, config *BertConfig) *BertForSequenceClassification {
 	bert := NewBertModel(p.Sub("bert"), config)
-	dropout := common.NewDropout(config.HiddenDropoutProb)
+	dropout := util.NewDropout(config.HiddenDropoutProb)
 	numLabels := len(config.Id2Label)
 
 	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
 
-	return BertForSequenceClassification{
+	return &BertForSequenceClassification{
 		bert:       bert,
 		dropout:    dropout,
-		classifier: classifier,
+		classifier: &classifier,
 	}
 }
 
@@ -366,7 +346,7 @@ func NewBertForSequenceClassification(p nn.Path, config BertConfig) BertForSeque
 // * `labels` - `Tensor` of shape (*batch size*, *numLabels*)
 // * `hiddenStates` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
 // * `attentions` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
-func (bsc BertForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+func (bsc *BertForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 	_, pooledOutput, allHiddenStates, allAttentions, err := bsc.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
 
 	if err != nil {
@@ -391,9 +371,9 @@ func (bsc BertForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, 
 // - `bert`: Base BertModel
 // - `classifier`: Linear layer for multiple choices
 type BertForMultipleChoice struct {
-	bert       BertModel
-	dropout    common.Dropout
-	classifier nn.Linear
+	bert       *BertModel
+	dropout    *util.Dropout
+	classifier *nn.Linear
 }
 
 // NewBertForMultipleChoice creates a new `BertForMultipleChoice`
@@ -403,15 +383,15 @@ type BertForMultipleChoice struct {
 // * `p` - Variable store path for the root of the BertForMultipleChoice model
 // * `config` - `BertConfig` object defining the model architecture
 //
-func NewBertForMultipleChoice(p nn.Path, config BertConfig) BertForMultipleChoice {
+func NewBertForMultipleChoice(p nn.Path, config *BertConfig) *BertForMultipleChoice {
 	bert := NewBertModel(p.Sub("bert"), config)
-	dropout := common.NewDropout(config.HiddenDropoutProb)
+	dropout := util.NewDropout(config.HiddenDropoutProb)
 	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, 1, nn.DefaultLinearConfig())
 
-	return BertForMultipleChoice{
+	return &BertForMultipleChoice{
 		bert:       bert,
 		dropout:    dropout,
-		classifier: classifier,
+		classifier: &classifier,
 	}
 }
 
@@ -430,7 +410,7 @@ func NewBertForMultipleChoice(p nn.Path, config BertConfig) BertForMultipleChoic
 // * `output` - `Tensor` of shape (*1*, *batch size*) containing the logits for each of the alternatives given
 // * `hiddenStates` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
 // * `attentions` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
-func (mc BertForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, positionIds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+func (mc *BertForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, positionIds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 
 	inputIdsSize := inputIds.MustSize()
 	fmt.Printf("inputIdsSize: %v\n", inputIdsSize)
@@ -480,9 +460,9 @@ func (mc BertForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, positionI
 // - `bert`: Base BertModel
 // - `classifier`: Linear layer for token classification
 type BertForTokenClassification struct {
-	bert       BertModel
-	dropout    common.Dropout
-	classifier nn.Linear
+	bert       *BertModel
+	dropout    *util.Dropout
+	classifier *nn.Linear
 }
 
 // NewBertForTokenClassification creates a new `BertForTokenClassification`
@@ -491,17 +471,17 @@ type BertForTokenClassification struct {
 //
 // * `p` - Variable store path for the root of the BertForTokenClassification model
 // * `config` - `BertConfig` object defining the model architecture, number of output labels and label mapping
-func NewBertForTokenClassification(p nn.Path, config BertConfig) BertForTokenClassification {
+func NewBertForTokenClassification(p nn.Path, config *BertConfig) *BertForTokenClassification {
 	bert := NewBertModel(p.Sub("bert"), config)
-	dropout := common.NewDropout(config.HiddenDropoutProb)
+	dropout := util.NewDropout(config.HiddenDropoutProb)
 
 	numLabels := len(config.Id2Label)
 	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
 
-	return BertForTokenClassification{
+	return &BertForTokenClassification{
 		bert:       bert,
 		dropout:    dropout,
-		classifier: classifier,
+		classifier: &classifier,
 	}
 }
 
@@ -521,7 +501,7 @@ func NewBertForTokenClassification(p nn.Path, config BertConfig) BertForTokenCla
 // * `output` - `Tensor` of shape (*batch size*, *sequenceLength*, *numLabels*) containing the logits for each of the input tokens and classes
 // * `hiddenStates` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
 // * `attentions` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
-func (tc BertForTokenClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+func (tc *BertForTokenClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 
 	hiddenState, _, allHiddenStates, allAttentions, err := tc.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
 	if err != nil {
@@ -546,8 +526,8 @@ func (tc BertForTokenClassification) ForwardT(inputIds, mask, tokenTypeIds, posi
 // - `bert`: Base BertModel
 // - `qa_outputs`: Linear layer for question answering
 type BertForQuestionAnswering struct {
-	bert      BertModel
-	qaOutputs nn.Linear
+	bert      *BertModel
+	qaOutputs *nn.Linear
 }
 
 // NewBertForQuestionAnswering creates a new `BertForQuestionAnswering`
@@ -556,15 +536,15 @@ type BertForQuestionAnswering struct {
 //
 // * `p` - Variable store path for the root of the BertForQuestionAnswering model
 // * `config` - `BertConfig` object defining the model architecture
-func NewForBertQuestionAnswering(p nn.Path, config BertConfig) BertForQuestionAnswering {
+func NewForBertQuestionAnswering(p nn.Path, config *BertConfig) *BertForQuestionAnswering {
 	bert := NewBertModel(p.Sub("bert"), config)
 
 	numLabels := 2
 	qaOutputs := nn.NewLinear(p.Sub("qa_outputs"), config.HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
 
-	return BertForQuestionAnswering{
+	return &BertForQuestionAnswering{
 		bert:      bert,
-		qaOutputs: qaOutputs,
+		qaOutputs: &qaOutputs,
 	}
 }
 
@@ -585,9 +565,7 @@ func NewForBertQuestionAnswering(p nn.Path, config BertConfig) BertForQuestionAn
 // * `endScores` - `Tensor` of shape (*batch size*, *sequenceLength*) containing the logits for end of the answer
 // * `hiddenStates` - Optional `[]ts.Tensor` of length *numHiddenLayers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
 // * `attentions` - Optional `[]ts.Tensor` of length *num_hidden_layers* with shape (*batch size*, *sequenceLength*, *hiddenSize*)
-func (qa BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
-
-	//NOTE: Temp comment out due to `gotch` missing api ts.MustSplit
+func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 
 	hiddenState, _, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
 	if err != nil {
