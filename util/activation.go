@@ -1,4 +1,4 @@
-package common
+package util
 
 import (
 	ts "github.com/sugarme/gotch/tensor"
