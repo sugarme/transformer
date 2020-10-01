@@ -1,4 +1,4 @@
-package transformer
+package util
 
 import (
 	"github.com/sugarme/gotch/nn"
@@ -6,29 +6,29 @@ import (
 )
 
 type LinearNoBiasConfig struct {
-	WsInit nn.Init
+	WsInit nn.Init // interface
 }
 
-func DefaultLinearNoBiasConfig() (retVal LinearNoBiasConfig) {
+func DefaultLinearNoBiasConfig() *LinearNoBiasConfig {
 
 	init := nn.NewKaimingUniformInit()
 
-	return LinearNoBiasConfig{WsInit: init}
+	return &LinearNoBiasConfig{WsInit: init}
 }
 
 type LinearNoBias struct {
 	Ws ts.Tensor
 }
 
-func NewLinearNoBias(vs nn.Path, inDim, outDim int64, config LinearNoBiasConfig) (retVal LinearNoBias) {
+func NewLinearNoBias(vs nn.Path, inDim, outDim int64, config *LinearNoBiasConfig) *LinearNoBias {
 
-	return LinearNoBias{
+	return &LinearNoBias{
 		Ws: vs.NewVar("weight", []int64{outDim, inDim}, config.WsInit),
 	}
 }
 
 // Forward implements Module interface for LinearNoBias
-func (lnb LinearNoBias) Forward(xs ts.Tensor) (retVal ts.Tensor) {
+func (lnb *LinearNoBias) Forward(xs ts.Tensor) (retVal ts.Tensor) {
 	wsT := lnb.Ws.MustT(false)
 	retVal = xs.MustMatmul(wsT, false)
 	wsT.MustDrop()

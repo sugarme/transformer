@@ -9,7 +9,7 @@ import (
 	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
 
-	"github.com/sugarme/transformer"
+	"github.com/sugarme/transformer/util"
 )
 
 // BertSelfAttention:
@@ -18,15 +18,15 @@ import (
 type BertSelfAttention struct {
 	NumAttentionHeads int64
 	AttentionHeadSize int64
-	Dropout           transformer.Dropout
+	Dropout           *util.Dropout
 	OutputAttentions  bool
-	Query             nn.Linear
-	Key               nn.Linear
-	Value             nn.Linear
+	Query             *nn.Linear
+	Key               *nn.Linear
+	Value             *nn.Linear
 }
 
 // NewBertSelfAttention creates a new `BertSelfAttention`
-func NewBertSelfAttention(p nn.Path, config *BertConfig) BertSelfAttention {
+func NewBertSelfAttention(p nn.Path, config *BertConfig) *BertSelfAttention {
 	if config.HiddenSize%config.NumAttentionHeads != 0 {
 		log.Fatal("Hidden size is not a multiple of the number of attention heads.")
 	}
@@ -36,30 +36,30 @@ func NewBertSelfAttention(p nn.Path, config *BertConfig) BertSelfAttention {
 	key := nn.NewLinear(p.Sub("key"), config.HiddenSize, config.HiddenSize, lconfig)
 	value := nn.NewLinear(p.Sub("value"), config.HiddenSize, config.HiddenSize, lconfig)
 
-	dropout := transformer.NewDropout(config.AttentionProbsDropoutProb)
+	dropout := util.NewDropout(config.AttentionProbsDropoutProb)
 	attentionHeadSize := int64(config.HiddenSize) / config.NumAttentionHeads
 	outputAttentions := config.OutputAttentions
 
-	return BertSelfAttention{
+	return &BertSelfAttention{
 		NumAttentionHeads: config.NumAttentionHeads,
 		AttentionHeadSize: attentionHeadSize,
 		Dropout:           dropout,
 		OutputAttentions:  outputAttentions,
-		Query:             query,
-		Key:               key,
-		Value:             value,
+		Query:             &query,
+		Key:               &key,
+		Value:             &value,
 	}
 
 }
 
-func (bsa BertSelfAttention) splitHeads(x ts.Tensor, bs, dimPerHead int64) (retVal ts.Tensor) {
+func (bsa *BertSelfAttention) splitHeads(x ts.Tensor, bs, dimPerHead int64) (retVal ts.Tensor) {
 
 	xview := x.MustView([]int64{bs, -1, bsa.NumAttentionHeads, dimPerHead}, false)
 
 	return xview.MustTranspose(1, 2, true)
 }
 
-func (bsa BertSelfAttention) flatten(x ts.Tensor, bs, dimPerHead int64) (retVal ts.Tensor) {
+func (bsa *BertSelfAttention) flatten(x ts.Tensor, bs, dimPerHead int64) (retVal ts.Tensor) {
 
 	xT := x.MustTranspose(1, 2, false)
 	xCon := xT.MustContiguous(true)
@@ -72,7 +72,7 @@ func (bsa BertSelfAttention) flatten(x ts.Tensor, bs, dimPerHead int64) (retVal 
 //
 // NOTE. mask, encoderHiddenStates, encoderMask are  optional tensors
 // for `None` value, `ts.None` can be used.
-func (bsa BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt ts.Tensor) {
+func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt ts.Tensor) {
 
 	key := bsa.Key.Forward(hiddenStates)
 	value := bsa.Value.Forward(hiddenStates)
@@ -127,12 +127,12 @@ func (bsa BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, e
 //================
 
 type BertSelfOutput struct {
-	Linear    nn.Linear
-	LayerNorm nn.LayerNorm
-	Dropout   transformer.Dropout
+	Linear    *nn.Linear
+	LayerNorm *nn.LayerNorm
+	Dropout   *util.Dropout
 }
 
-func NewBertSelfOutput(p nn.Path, config *BertConfig) (retVal BertSelfOutput) {
+func NewBertSelfOutput(p nn.Path, config *BertConfig) *BertSelfOutput {
 
 	path := p.Sub("dense")
 	lconfig := nn.DefaultLinearConfig()
@@ -142,12 +142,12 @@ func NewBertSelfOutput(p nn.Path, config *BertConfig) (retVal BertSelfOutput) {
 	layerNormConfig.Eps = 1e-12
 
 	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int64{config.HiddenSize}, layerNormConfig)
-	dropout := transformer.NewDropout(config.HiddenDropoutProb)
+	dropout := util.NewDropout(config.HiddenDropoutProb)
 
-	return BertSelfOutput{linear, layerNorm, dropout}
+	return &BertSelfOutput{&linear, &layerNorm, dropout}
 }
 
-func (bso BertSelfOutput) ForwardT(hiddenStates ts.Tensor, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
+func (bso *BertSelfOutput) ForwardT(hiddenStates ts.Tensor, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
 
 	state1 := hiddenStates.Apply(bso.Linear)
 	state2 := state1.ApplyT(bso.Dropout, train)
@@ -165,18 +165,18 @@ func (bso BertSelfOutput) ForwardT(hiddenStates ts.Tensor, inputTensor ts.Tensor
 //===============
 
 type BertAttention struct {
-	Bsa    BertSelfAttention
-	Output BertSelfOutput
+	Bsa    *BertSelfAttention
+	Output *BertSelfOutput
 }
 
-func NewBertAttention(p nn.Path, config *BertConfig) (retVal BertAttention) {
+func NewBertAttention(p nn.Path, config *BertConfig) *BertAttention {
 	self := NewBertSelfAttention(p.Sub("self"), config)
 	output := NewBertSelfOutput(p.Sub("output"), config)
 
-	return BertAttention{self, output}
+	return &BertAttention{self, output}
 }
 
-func (ba BertAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, RetValOpt ts.Tensor) {
+func (ba *BertAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, RetValOpt ts.Tensor) {
 
 	selfOutput, attentionWeights := ba.Bsa.ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask, train)
 	selfOutput = ba.Output.ForwardT(selfOutput, hiddenStates, train)
@@ -188,23 +188,23 @@ func (ba BertAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encode
 //=================
 
 type BertIntermediate struct {
-	Lin        nn.Linear
-	Activation transformer.ActivationFn
+	Lin        *nn.Linear
+	Activation util.ActivationFn // interface
 }
 
-func NewBertIntermediate(p nn.Path, config *BertConfig) (retVal BertIntermediate) {
+func NewBertIntermediate(p nn.Path, config *BertConfig) *BertIntermediate {
 	lconfig := nn.DefaultLinearConfig()
 	lin := nn.NewLinear(p.Sub("dense"), config.HiddenSize, config.IntermediateSize, lconfig)
 
-	actFn, ok := transformer.ActivationFnMap[config.HiddenAct]
+	actFn, ok := util.ActivationFnMap[config.HiddenAct]
 	if !ok {
 		log.Fatalf("Unsupported activation function - %v\n", config.HiddenAct)
 	}
 
-	return BertIntermediate{lin, actFn}
+	return &BertIntermediate{&lin, actFn}
 }
 
-func (bi BertIntermediate) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
+func (bi *BertIntermediate) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
 
 	states := hiddenStates.Apply(bi.Lin)
 
@@ -218,12 +218,12 @@ func (bi BertIntermediate) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
 //============
 
 type BertOutput struct {
-	Lin       nn.Linear
-	LayerNorm nn.LayerNorm
-	Dropout   transformer.Dropout
+	Lin       *nn.Linear
+	LayerNorm *nn.LayerNorm
+	Dropout   *util.Dropout
 }
 
-func NewBertOutput(p nn.Path, config *BertConfig) (retVal BertOutput) {
+func NewBertOutput(p nn.Path, config *BertConfig) *BertOutput {
 	lconfig := nn.DefaultLinearConfig()
 
 	lin := nn.NewLinear(p.Sub("dense"), config.IntermediateSize, config.HiddenSize, lconfig)
@@ -232,12 +232,12 @@ func NewBertOutput(p nn.Path, config *BertConfig) (retVal BertOutput) {
 	layerNormConfig.Eps = 1e-12
 	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int64{config.HiddenSize}, layerNormConfig)
 
-	dropout := transformer.NewDropout(config.HiddenDropoutProb)
+	dropout := util.NewDropout(config.HiddenDropoutProb)
 
-	return BertOutput{lin, layerNorm, dropout}
+	return &BertOutput{&lin, &layerNorm, dropout}
 }
 
-func (bo BertOutput) ForwardT(hiddenStates, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
+func (bo *BertOutput) ForwardT(hiddenStates, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
 
 	state1 := hiddenStates.Apply(bo.Lin)
 	state2 := state1.ApplyT(bo.Dropout, train)

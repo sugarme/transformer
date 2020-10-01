@@ -7,7 +7,7 @@ import (
 	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
 
-	"github.com/sugarme/transformer"
+	"github.com/sugarme/transformer/util"
 )
 
 // BertEmbedding defines interface for BertModel or RoBertaModel
@@ -16,17 +16,17 @@ type BertEmbedding interface {
 }
 
 type BertEmbeddings struct {
-	WordEmbeddings      nn.Embedding
-	PositionEmbeddings  nn.Embedding
-	TokenTypeEmbeddings nn.Embedding
-	LayerNorm           nn.LayerNorm
-	Dropout             transformer.Dropout
+	WordEmbeddings      *nn.Embedding
+	PositionEmbeddings  *nn.Embedding
+	TokenTypeEmbeddings *nn.Embedding
+	LayerNorm           *nn.LayerNorm
+	Dropout             *util.Dropout
 }
 
 // NewBertEmbeddings builds a new BertEmbeddings
 // * `p` - Varstore path for the root of the BertEmbeddings model
 // * `config` - `BertConfig` object defining the model architecture and vocab/hidden size
-func NewBertEmbeddings(p nn.Path, config *BertConfig) (retVal BertEmbeddings) {
+func NewBertEmbeddings(p nn.Path, config *BertConfig) *BertEmbeddings {
 	embeddingConfig := nn.DefaultEmbeddingConfig()
 	embeddingConfig.PaddingIdx = 0
 
@@ -45,9 +45,9 @@ func NewBertEmbeddings(p nn.Path, config *BertConfig) (retVal BertEmbeddings) {
 	lnPath := p.Sub("LayerNorm")
 	layerNorm := nn.NewLayerNorm(lnPath, []int64{config.HiddenSize}, layerNormConfig)
 
-	dropout := transformer.NewDropout(config.HiddenDropoutProb)
+	dropout := util.NewDropout(config.HiddenDropoutProb)
 
-	return BertEmbeddings{wordEmbeddings, positionEmbeddings, tokenTypeEmbeddings, layerNorm, dropout}
+	return &BertEmbeddings{&wordEmbeddings, &positionEmbeddings, &tokenTypeEmbeddings, &layerNorm, dropout}
 }
 
 // ForwardT implements BertEmbedding interface, passes throught the embedding layer
