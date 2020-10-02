@@ -27,7 +27,7 @@ func NewRobertaLMHead(p nn.Path, config *bert.BertConfig) *RobertaLMHead {
 	layerNormConfig.Eps = 1e-12
 	layerNorm := nn.NewLayerNorm(p.Sub("layer_norm"), []int64{config.HiddenSize}, layerNormConfig)
 
-	decoder := util.NewLinearNoBias(p.Sub("decoder"), config.HiddenSize, config.HiddenSize, util.DefaultLinearNoBiasConfig())
+	decoder := util.NewLinearNoBias(p.Sub("decoder"), config.HiddenSize, config.VocabSize, util.DefaultLinearNoBiasConfig())
 
 	bias := p.NewVar("bias", []int64{config.VocabSize}, nn.NewKaimingUniformInit())
 
@@ -51,7 +51,6 @@ func (rh *RobertaLMHead) Forward(hiddenStates ts.Tensor) ts.Tensor {
 	geluFwd.MustDrop()
 	appliedDense.MustDrop()
 	appliedLN.MustDrop()
-	appliedDecoder.MustDrop()
 
 	return appliedBias
 }
