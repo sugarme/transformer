@@ -10,19 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [#...]: Fix a bug with...
 
 ### Changed
-- [#1]: Completely changed package structure and use struct method pointer receiver
+- [#...]: 
 
 ### Added
-- [#...]: Roberta
+- [#...]: 
 
-## [0.0.1]
 
-### Fixed
-- [#...]: Fix ...
+## [0.1.2]
+
+### Added
+- [#2]: Added Roberta model
 
 ### Changed
-- [#...]: Changed ...
+- Updated comment document for Bert model.
 
-### Added
-- [#...]: Added ...
+### Fixed
+- None
 
