@@ -10,7 +10,7 @@ import (
 	"github.com/sugarme/transformer/util"
 )
 
-// BertEmbedding defines interface for BertModel or RoBertaModel
+// BertEmbedding defines interface for BertModel or RoBertaModel.
 type BertEmbedding interface {
 	ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (ts.Tensor, error)
 }
@@ -24,8 +24,6 @@ type BertEmbeddings struct {
 }
 
 // NewBertEmbeddings builds a new BertEmbeddings
-// * `p` - Varstore path for the root of the BertEmbeddings model
-// * `config` - `BertConfig` object defining the model architecture and vocab/hidden size
 func NewBertEmbeddings(p nn.Path, config *BertConfig) *BertEmbeddings {
 	embeddingConfig := nn.DefaultEmbeddingConfig()
 	embeddingConfig.PaddingIdx = 0
