@@ -214,30 +214,32 @@ func NewRobertaForMultipleChoice(p nn.Path, config *bert.BertConfig) *RobertaFor
 
 // ForwardT forwards pass through the model.
 func (mc *RobertaForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, positionIds ts.Tensor, train bool) (output ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
+
 	numChoices := inputIds.MustSize()[1]
-	flatInputIds := inputIds.MustView([]int64{-1, int64(len(inputIds.MustSize()) - 1)}, false)
-	var flatPositionIds ts.Tensor
-	if !tokenTypeIds.MustDefined() {
-		flatPositionIds = ts.None
-	} else {
-		flatPositionIds = tokenTypeIds.MustView([]int64{-1, int64(len(tokenTypeIds.MustSize()) - 1)}, false)
+
+	inputIdsSize := inputIds.MustSize()
+	flatInputIds := inputIds.MustView([]int64{-1, inputIdsSize[len(inputIdsSize)-1]}, false)
+
+	flatPositionIds := ts.None
+	if positionIds.MustDefined() {
+		positionIdsSize := positionIds.MustSize()
+		flatPositionIds = positionIds.MustView([]int64{-1, positionIdsSize[len(positionIdsSize)-1]}, false)
 	}
 
-	var flatTokenTypeIds ts.Tensor
-	if !tokenTypeIds.MustDefined() {
-		flatTokenTypeIds = ts.None
-	} else {
-		flatTokenTypeIds = tokenTypeIds.MustView([]int64{-1, int64(len(tokenTypeIds.MustSize()) - 1)}, false)
+	flatTokenTypeIds := ts.None
+	if tokenTypeIds.MustDefined() {
+		tokenTypeIdsSize := tokenTypeIds.MustSize()
+		flatTokenTypeIds = tokenTypeIds.MustView([]int64{-1, tokenTypeIdsSize[len(tokenTypeIdsSize)-1]}, false)
 	}
 
-	var flatMask ts.Tensor
-	if !mask.MustDefined() {
-		flatMask = ts.None
-	} else {
-		flatMask = mask.MustView([]int64{-1, int64(len(mask.MustSize()) - 1)}, false)
+	flatMask := ts.None
+	if mask.MustDefined() {
+		flatMaskSize := flatMask.MustSize()
+		flatMask = mask.MustView([]int64{-1, flatMaskSize[len(flatMaskSize)-1]}, false)
 	}
 
-	_, pooledOutput, hiddenStates, attentions, err := mc.roberta.ForwardT(flatInputIds, flatMask, flatTokenTypeIds, flatPositionIds, ts.None, ts.None, ts.None, train)
+	var pooledOutput ts.Tensor
+	_, pooledOutput, hiddenStates, attentions, err = mc.roberta.ForwardT(flatInputIds, flatMask, flatTokenTypeIds, flatPositionIds, ts.None, ts.None, ts.None, train)
 	if err != nil {
 		return ts.None, nil, nil, err
 	}
