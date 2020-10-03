@@ -4,6 +4,7 @@ import (
 	ts "github.com/sugarme/gotch/tensor"
 )
 
+// TensorOpt is a function type to create pointer to tensor.
 type TensorOpt func() *ts.Tensor
 
 func MaskTensorOpt(t *ts.Tensor) TensorOpt {
