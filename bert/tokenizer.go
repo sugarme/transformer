@@ -32,8 +32,6 @@ func NewTokenizer() *Tokenizer {
 	return &Tokenizer{tk}
 }
 
-// type BertTokenizer = tokenizer.Tokenizer
-
 func (bt *Tokenizer) Load(modelNameOrPath string, params map[string]interface{}) error {
 	var urlOrFilename string
 	// If modelName, infer to default vocab filename:

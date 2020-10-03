@@ -24,8 +24,6 @@ type BertEmbeddings struct {
 }
 
 // NewBertEmbeddings builds a new BertEmbeddings
-// * `p` - Varstore path for the root of the BertEmbeddings model
-// * `config` - `BertConfig` object defining the model architecture and vocab/hidden size
 func NewBertEmbeddings(p nn.Path, config *BertConfig) *BertEmbeddings {
 	embeddingConfig := nn.DefaultEmbeddingConfig()
 	embeddingConfig.PaddingIdx = 0

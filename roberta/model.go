@@ -4,10 +4,12 @@ package roberta
 import (
 	// "fmt"
 
+	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
 
 	"github.com/sugarme/transformer/bert"
+	"github.com/sugarme/transformer/pretrained"
 	"github.com/sugarme/transformer/util"
 )
 
@@ -73,6 +75,38 @@ func NewRobertaForMaskedLM(p nn.Path, config *bert.BertConfig) *RobertaForMasked
 		roberta: roberta,
 		lmHead:  lmHead,
 	}
+}
+
+// Load loads model from file or model name. It also updates
+// default configuration parameters if provided.
+// This method implements `PretrainedModel` interface.
+func (mlm *RobertaForMaskedLM) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+	var urlOrFilename string
+	// If modelName, infer to default configuration filename:
+	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+		urlOrFilename = modelFile
+	} else {
+		// Otherwise, just take the input
+		urlOrFilename = modelNameOrPath
+	}
+
+	cachedFile, err := util.CachedPath(urlOrFilename)
+	if err != nil {
+		return err
+	}
+
+	vs := nn.NewVarStore(device)
+	p := vs.Root()
+
+	mlm.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	mlm.lmHead = NewRobertaLMHead(p.Sub("lm_head"), config.(*bert.BertConfig))
+
+	err = vs.Load(cachedFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Forwad forwads pass through the model.
@@ -174,6 +208,38 @@ func NewRobertaForSequenceClassification(p nn.Path, config *bert.BertConfig) *Ro
 	}
 }
 
+// Load loads model from file or model name. It also updates default configuration parameters if provided.
+//
+// This method implements `PretrainedModel` interface.
+func (sc *RobertaForSequenceClassification) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+	var urlOrFilename string
+	// If modelName, infer to default configuration filename:
+	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+		urlOrFilename = modelFile
+	} else {
+		// Otherwise, just take the input
+		urlOrFilename = modelNameOrPath
+	}
+
+	cachedFile, err := util.CachedPath(urlOrFilename)
+	if err != nil {
+		return err
+	}
+
+	vs := nn.NewVarStore(device)
+	p := vs.Root()
+
+	sc.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	sc.classifier = NewRobertaClassificationHead(p.Sub("classifier"), config.(*bert.BertConfig))
+
+	err = vs.Load(cachedFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Forward forwards pass through the model.
 func (sc *RobertaForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (labels ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
 
@@ -210,6 +276,40 @@ func NewRobertaForMultipleChoice(p nn.Path, config *bert.BertConfig) *RobertaFor
 		dropout:    dropout,
 		classifier: &classifier,
 	}
+}
+
+// Load loads model from file or model name. It also updates default configuration parameters if provided.
+//
+// This method implements `PretrainedModel` interface.
+func (mc *RobertaForMultipleChoice) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+	var urlOrFilename string
+	// If modelName, infer to default configuration filename:
+	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+		urlOrFilename = modelFile
+	} else {
+		// Otherwise, just take the input
+		urlOrFilename = modelNameOrPath
+	}
+
+	cachedFile, err := util.CachedPath(urlOrFilename)
+	if err != nil {
+		return err
+	}
+
+	vs := nn.NewVarStore(device)
+	p := vs.Root()
+
+	mc.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	mc.dropout = util.NewDropout(config.(*bert.BertConfig).HiddenDropoutProb)
+	classifier := nn.NewLinear(p.Sub("classifier"), config.(*bert.BertConfig).HiddenSize, 1, nn.DefaultLinearConfig())
+	mc.classifier = &classifier
+
+	err = vs.Load(cachedFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ForwardT forwards pass through the model.
@@ -274,6 +374,44 @@ func NewRobertaForTokenClassification(p nn.Path, config *bert.BertConfig) *Rober
 	}
 }
 
+// Load loads model from file or model name. It also updates default configuration parameters if provided.
+//
+// This method implements `PretrainedModel` interface.
+func (tc *RobertaForTokenClassification) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+	var urlOrFilename string
+	// If modelName, infer to default configuration filename:
+	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+		urlOrFilename = modelFile
+	} else {
+		// Otherwise, just take the input
+		urlOrFilename = modelNameOrPath
+	}
+
+	cachedFile, err := util.CachedPath(urlOrFilename)
+	if err != nil {
+		return err
+	}
+
+	vs := nn.NewVarStore(device)
+	p := vs.Root()
+
+	roberta := bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	dropout := util.NewDropout(config.(*bert.BertConfig).HiddenDropoutProb)
+	numLabels := int64(len(config.(*bert.BertConfig).Id2Label))
+	classifier := nn.NewLinear(p.Sub("classifier"), config.(*bert.BertConfig).HiddenSize, numLabels, nn.DefaultLinearConfig())
+
+	tc.roberta = roberta
+	tc.dropout = dropout
+	tc.classifier = &classifier
+
+	err = vs.Load(cachedFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ForwardT forwards pass through the model.
 func (tc *RobertaForTokenClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (output ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
 	hiddenState, _, hiddenStates, attentions, err := tc.roberta.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
@@ -305,6 +443,42 @@ func NewRobertaForQuestionAnswering(p nn.Path, config *bert.BertConfig) *Roberta
 		roberta:   roberta,
 		qaOutputs: &qaOutputs,
 	}
+}
+
+// Load loads model from file or model name. It also updates default configuration parameters if provided.
+//
+// This method implements `PretrainedModel` interface.
+func (qa *RobertaForQuestionAnswering) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+	var urlOrFilename string
+	// If modelName, infer to default configuration filename:
+	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+		urlOrFilename = modelFile
+	} else {
+		// Otherwise, just take the input
+		urlOrFilename = modelNameOrPath
+	}
+
+	cachedFile, err := util.CachedPath(urlOrFilename)
+	if err != nil {
+		return err
+	}
+
+	vs := nn.NewVarStore(device)
+	p := vs.Root()
+
+	roberta := bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	numLabels := int64(2)
+	qaOutputs := nn.NewLinear(p.Sub("qa_outputs"), config.(*bert.BertConfig).HiddenSize, numLabels, nn.DefaultLinearConfig())
+
+	qa.roberta = roberta
+	qa.qaOutputs = &qaOutputs
+
+	err = vs.Load(cachedFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ForwadT forwards pass through the model.
