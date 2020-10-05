@@ -572,7 +572,7 @@ type BertForQuestionAnswering struct {
 // Params:
 // 	- `p`: Variable store path for the root of the BertForQuestionAnswering model
 // 	- `config`: `BertConfig` object defining the model architecture
-func NewForBertQuestionAnswering(p nn.Path, config *BertConfig) *BertForQuestionAnswering {
+func NewBertForQuestionAnswering(p nn.Path, config *BertConfig) *BertForQuestionAnswering {
 	bert := NewBertModel(p.Sub("bert"), config)
 
 	numLabels := 2
@@ -582,6 +582,42 @@ func NewForBertQuestionAnswering(p nn.Path, config *BertConfig) *BertForQuestion
 		bert:      bert,
 		qaOutputs: &qaOutputs,
 	}
+}
+
+// Load loads model from file or model name. It also updates
+// default configuration parameters if provided.
+// This method implements `PretrainedModel` interface.
+func (qa *BertForQuestionAnswering) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+	var urlOrFilename string
+	// If modelName, infer to default configuration filename:
+	if modelFile, ok := pretrained.BertModels[modelNameOrPath]; ok {
+		urlOrFilename = modelFile
+	} else {
+		// Otherwise, just take the input
+		urlOrFilename = modelNameOrPath
+	}
+
+	cachedFile, err := util.CachedPath(urlOrFilename)
+	if err != nil {
+		return err
+	}
+
+	vs := nn.NewVarStore(device)
+	p := vs.Root()
+
+	bert := NewBertModel(p.Sub("bert"), config.(*BertConfig))
+
+	numLabels := 2
+	qaOutputs := nn.NewLinear(p.Sub("qa_outputs"), config.(*BertConfig).HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
+
+	qa.bert = bert
+	qa.qaOutputs = &qaOutputs
+	err = vs.Load(cachedFile)
+	if err != nil {
+		log.Fatalf("Load model weight error: \n%v", err)
+	}
+
+	return nil
 }
 
 // ForwardT forwards pass through the model.
@@ -603,11 +639,12 @@ func NewForBertQuestionAnswering(p nn.Path, config *BertConfig) *BertForQuestion
 // 	- `output`: tensor of shape (batch size, sequence length, hidden size)
 // 	- `hiddenStates`: slice of tensors of length numHiddenLayers with shape (batch size, sequenceLength, hiddenSize)
 // 	- `attentions`: slice of tensors of length numHiddenLayers with shape (batch size, sequenceLength, hiddenSize)
-func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
 
 	hiddenState, _, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
 	if err != nil {
-		log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
+		// log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
+		return ts.None, ts.None, nil, nil, err
 	}
 
 	sequenceOutput := hiddenState.Apply(qa.qaOutputs)
@@ -615,5 +652,5 @@ func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, posit
 	startLogits := logits[0].MustSqueeze1(int64(-1), false)
 	endLogits := logits[1].MustSqueeze1(int64(-1), false)
 
-	return startLogits, endLogits, allHiddenStates, allAttentions
+	return startLogits, endLogits, allHiddenStates, allAttentions, nil
 }

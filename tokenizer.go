@@ -16,6 +16,6 @@ import (
 // environment if existing, otherwise it will be cached in `$HOME/.cache/transformers/` directory.
 // If `modleNameOrPath` is valid URL, file will be downloaded and cached.
 // Finally, vocab data will be loaded to `tk`.
-func LoadTokenizer(tk pretrained.Tokenizer, modelNameOrPath string, customParams map[string]interface{}) error {
-	return tk.Load(modelNameOrPath, customParams)
+func LoadTokenizer(tk pretrained.Tokenizer, vocabNameOrPath, mergesNameOrPath string, customParams map[string]interface{}) error {
+	return tk.Load(vocabNameOrPath, mergesNameOrPath, customParams)
 }

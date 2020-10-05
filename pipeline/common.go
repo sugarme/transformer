@@ -62,76 +62,77 @@ const (
 	AlbertTokenizer
 )
 
-// TokenizerOption specifies a tokenizer
-type TokenizerOption struct {
-	model     ModelType
-	tokenizer *tokenizer.Tokenizer
-}
-
-// ConfigOption methods:
-// =====================
-
-// ConfigOptionFromFile loads configuration for corresponding model type from file.
-func ConfigOptionFromFile(modelType ModelType, path string) *ConfigOption {
-
-	var configOpt *ConfigOption
-
-	switch reflect.TypeOf(modelType).Kind().String() {
-	case "Bert":
-		config := bert.ConfigFromFile(path)
-		configOpt = &ConfigOption{
-			model:  Bert,
-			config: config,
-		}
-
-	// TODO: implement others
-	// case "DistilBert":
-	default:
-		log.Fatalf("Invalid modelType: '%v'\n", reflect.TypeOf(modelType).Kind().String())
-	}
-
-	return configOpt
-}
-
-// GetLabelMap returns label mapping for corresponding model type.
-func (co *ConfigOption) GetLabelMapping() map[int64]string {
-
-	var labelMap map[int64]string = make(map[int64]string)
-
-	modelTypeStr := reflect.TypeOf(co.model).Kind().String()
-	switch modelTypeStr {
-	case "Bert":
-		labelMap = co.config.(bert.BertConfig).Id2Label
-
-	// TODO: implement others
-	default:
-		log.Fatalf("ConfigOption GetLabelMapping error: invalid model type ('%v')\n", modelTypeStr)
-	}
-
-	return labelMap
-}
-
-// TOkenizerOptionFromFile loads TokenizerOption from file corresponding to model type.
-func TokenizerOptionFromFile(modelType ModelType, path string) *TokenizerOption {
-	modelTypeStr := reflect.TypeOf(modelType).Kind().String()
-
-	var tk *TokenizerOption
-	switch modelTypeStr {
-	case "Bert":
-		tk = &TokenizerOption{
-			model:     modelType,
-			tokenizer: getBert(path),
-		}
-
-	// TODO: implement others
-
-	default:
-		log.Fatalf("Unsupported model type: '%v'", modelTypeStr)
-	}
-
-	return tk
-}
-
+/*
+ * // TokenizerOption specifies a tokenizer
+ * type TokenizerOption struct {
+ *   model     ModelType
+ *   tokenizer *tokenizer.Tokenizer
+ * }
+ *
+ * // ConfigOption methods:
+ * // =====================
+ *
+ * // ConfigOptionFromFile loads configuration for corresponding model type from file.
+ * func ConfigOptionFromFile(modelType ModelType, path string) *ConfigOption {
+ *
+ *   var configOpt *ConfigOption
+ *
+ *   switch reflect.TypeOf(modelType).Kind().String() {
+ *   case "Bert":
+ *     config := bert.ConfigFromFile(path)
+ *     configOpt = &ConfigOption{
+ *       model:  Bert,
+ *       config: config,
+ *     }
+ *
+ *   // TODO: implement others
+ *   // case "DistilBert":
+ *   default:
+ *     log.Fatalf("Invalid modelType: '%v'\n", reflect.TypeOf(modelType).Kind().String())
+ *   }
+ *
+ *   return configOpt
+ * }
+ *
+ * // GetLabelMap returns label mapping for corresponding model type.
+ * func (co *ConfigOption) GetLabelMapping() map[int64]string {
+ *
+ *   var labelMap map[int64]string = make(map[int64]string)
+ *
+ *   modelTypeStr := reflect.TypeOf(co.model).Kind().String()
+ *   switch modelTypeStr {
+ *   case "Bert":
+ *     labelMap = co.config.(bert.BertConfig).Id2Label
+ *
+ *   // TODO: implement others
+ *   default:
+ *     log.Fatalf("ConfigOption GetLabelMapping error: invalid model type ('%v')\n", modelTypeStr)
+ *   }
+ *
+ *   return labelMap
+ * }
+ *
+ * // TOkenizerOptionFromFile loads TokenizerOption from file corresponding to model type.
+ * func TokenizerOptionFromFile(modelType ModelType, path string) *TokenizerOption {
+ *   modelTypeStr := reflect.TypeOf(modelType).Kind().String()
+ *
+ *   var tk *TokenizerOption
+ *   switch modelTypeStr {
+ *   case "Bert":
+ *     tk = &TokenizerOption{
+ *       model:     modelType,
+ *       tokenizer: getBert(path),
+ *     }
+ *
+ *   // TODO: implement others
+ *
+ *   default:
+ *     log.Fatalf("Unsupported model type: '%v'", modelTypeStr)
+ *   }
+ *
+ *   return tk
+ * }
+ *  */
 func getBert(path string) (retVal *tokenizer.Tokenizer) {
 	model, err := wordpiece.NewWordPieceFromFile(path, "[UNK]")
 	if err != nil {
