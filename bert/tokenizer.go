@@ -13,16 +13,6 @@ import (
 	"github.com/sugarme/transformer/util"
 )
 
-type BertTokenizerFast = tokenizer.Tokenizer
-
-// BertJapaneseTokenizerFromPretrained initiate BERT tokenizer for Japanese language from pretrained file.
-func BertJapaneseTokenizerFromPretrained(pretrainedModelNameOrPath string, customParams map[string]interface{}) *tokenizer.Tokenizer {
-
-	// TODO: implement it
-
-	panic("Not implemented yet.")
-}
-
 type Tokenizer struct {
 	*tokenizer.Tokenizer
 }
@@ -32,14 +22,18 @@ func NewTokenizer() *Tokenizer {
 	return &Tokenizer{tk}
 }
 
-func (bt *Tokenizer) Load(modelNameOrPath string, params map[string]interface{}) error {
+// Load method loads tokenizer from pretrained file.
+//
+// NOTE: for BERT model, only vocabNameOrPath will be used. `mergesNameOrPath` won't.
+// It's there to satisfy the method Load signature of `pretrained.Tokenizer` interface.
+func (bt *Tokenizer) Load(vocabNameOrPath, mergesNameOrPath string, params map[string]interface{}) error {
 	var urlOrFilename string
 	// If modelName, infer to default vocab filename:
-	if vocabFile, ok := pretrained.BertVocabs[modelNameOrPath]; ok {
+	if vocabFile, ok := pretrained.BertVocabs[vocabNameOrPath]; ok {
 		urlOrFilename = vocabFile
 	} else {
 		// Otherwise, just take the input
-		urlOrFilename = modelNameOrPath
+		urlOrFilename = vocabNameOrPath
 	}
 
 	cachedFile, err := util.CachedPath(urlOrFilename)

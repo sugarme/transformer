@@ -25,14 +25,14 @@ func NewTokenizer() *Tokenizer {
 }
 
 // Load loads Roberta tokenizer from pretrain vocab and merges files.
-func (t *Tokenizer) Load(modelNameOrPath string, params map[string]interface{}) error {
+func (t *Tokenizer) Load(vocabNameOrPath, mergesNameOrPath string, params map[string]interface{}) error {
 	var urlOrFilenameVocab string
 	// If modelName, infer to default vocab filename:
-	if vocabFile, ok := pretrained.RobertaVocabs[modelNameOrPath]; ok {
+	if vocabFile, ok := pretrained.RobertaVocabs[vocabNameOrPath]; ok {
 		urlOrFilenameVocab = vocabFile
 	} else {
 		// Otherwise, just take the input
-		urlOrFilenameVocab = modelNameOrPath
+		urlOrFilenameVocab = vocabNameOrPath
 	}
 	cachedFileVocab, err := util.CachedPath(urlOrFilenameVocab)
 	if err != nil {
@@ -41,11 +41,11 @@ func (t *Tokenizer) Load(modelNameOrPath string, params map[string]interface{}) 
 
 	var urlOrFilenameMerges string
 	// If modelName, infer to default vocab filename:
-	if mergesFile, ok := pretrained.RobertaMerges[modelNameOrPath]; ok {
+	if mergesFile, ok := pretrained.RobertaMerges[mergesNameOrPath]; ok {
 		urlOrFilenameMerges = mergesFile
 	} else {
 		// Otherwise, just take the input
-		urlOrFilenameMerges = modelNameOrPath
+		urlOrFilenameMerges = mergesNameOrPath
 	}
 	cachedFileMerges, err := util.CachedPath(urlOrFilenameMerges)
 	if err != nil {
