@@ -40,7 +40,7 @@ func (nm *NERModel) Predict(input []string) []Entity {
 	for _, tok := range tokens {
 		if tok.Label != "0" {
 			entities = append(entities, Entity{
-				Word:  tok.Text,
+				Word:  tok.Word,
 				Score: tok.Score,
 				Label: tok.Label,
 			})

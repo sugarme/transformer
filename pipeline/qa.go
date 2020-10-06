@@ -364,7 +364,7 @@ func (qa *QuestionAnsweringModel) Predict(qaInputs []QAInput, topK int64, batchS
 			// TODO: update more models here.
 
 			default:
-				log.Fatal("Unsupported Model type '%v'", reflect.TypeOf(qa.qaModel).Name())
+				log.Fatalf("Unsupported Model type '%v'", reflect.TypeOf(qa.qaModel).Name())
 			}
 
 			startLogits.MustDetach_()
@@ -475,14 +475,41 @@ func isAnswerExist(answers []Answer, a Answer) bool {
 	return false
 }
 
+func (qa *QuestionAnsweringModel) decode(start, end ts.Tensor, topK int64) ([]int64, []int64, []float64) {
+
+	// TODO: delete all intermediate tensors
+	outer := start.MustUnsqueeze(-1, false).MustMatmul(end.MustUnsqueeze(0, false), false)
+	startDim := start.MustSize()[0]
+	endDim := end.MustSize()[0]
+	candidates := outer.MustTriu(0, false).MustTril(int64(qa.maxAnswerLen-1), false).MustFlatten(0, -1, false)
+
+	var idxSort ts.Tensor
+	if topK == 1 {
+		idxSort = candidates.MustArgmax(0, true, false)
+	} else if candidates.MustSize()[0] < topK {
+		idxSort = candidates.MustArgsort(0, true, false)
+	} else {
+		idxSort = candidates.MustArgsort(0, true, false).MustSlice(0, 0, topK, 1, false)
+	}
+
+	var (
+		startOut []int64
+		endOut   []int64
+		scores   []float64
+	)
+
+	for flatIndexPosition := 0; flatIndexPosition < int(idxSort.MustSize()[0]); flatIndexPosition++ {
+		flatIndex := idxSort.MustInt64Value([]int64{int64(flatIndexPosition)})
+		scores = append(scores, candidates.MustFloat64Value([]int64{flatIndex}))
+		startOut = append(startOut, flatIndex/startDim)
+		endOut = append(endOut, flatIndex%endDim)
+	}
+
+	return startOut, endOut, scores
+}
+
 func (qa *QuestionAnsweringModel) generateFeatures(qaExample QAExample, maxSeqLen, docStride, maxQueryLen, exampleIdx int) []QAFeature {
 
 	// TODO: implement
 	panic("Not implemented yet.")
-}
-
-func (qa *QuestionAnsweringModel) decode(start, end ts.Tensor, topK int64) ([]int64, []int64, []float64) {
-	// TODO: implement
-
-	panic("Have not implemented yet!")
 }
