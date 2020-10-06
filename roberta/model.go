@@ -4,7 +4,6 @@ package roberta
 import (
 	// "fmt"
 
-	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
 
@@ -80,7 +79,7 @@ func NewRobertaForMaskedLM(p nn.Path, config *bert.BertConfig) *RobertaForMasked
 // Load loads model from file or model name. It also updates
 // default configuration parameters if provided.
 // This method implements `PretrainedModel` interface.
-func (mlm *RobertaForMaskedLM) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+func (mlm *RobertaForMaskedLM) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, vs nn.VarStore) error {
 	var urlOrFilename string
 	// If modelName, infer to default configuration filename:
 	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
@@ -95,7 +94,6 @@ func (mlm *RobertaForMaskedLM) Load(modelNameOrPath string, config interface{ pr
 		return err
 	}
 
-	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
 	mlm.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
@@ -211,7 +209,7 @@ func NewRobertaForSequenceClassification(p nn.Path, config *bert.BertConfig) *Ro
 // Load loads model from file or model name. It also updates default configuration parameters if provided.
 //
 // This method implements `PretrainedModel` interface.
-func (sc *RobertaForSequenceClassification) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+func (sc *RobertaForSequenceClassification) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, vs nn.VarStore) error {
 	var urlOrFilename string
 	// If modelName, infer to default configuration filename:
 	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
@@ -226,7 +224,6 @@ func (sc *RobertaForSequenceClassification) Load(modelNameOrPath string, config 
 		return err
 	}
 
-	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
 	sc.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
@@ -281,7 +278,7 @@ func NewRobertaForMultipleChoice(p nn.Path, config *bert.BertConfig) *RobertaFor
 // Load loads model from file or model name. It also updates default configuration parameters if provided.
 //
 // This method implements `PretrainedModel` interface.
-func (mc *RobertaForMultipleChoice) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+func (mc *RobertaForMultipleChoice) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, vs nn.VarStore) error {
 	var urlOrFilename string
 	// If modelName, infer to default configuration filename:
 	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
@@ -296,7 +293,6 @@ func (mc *RobertaForMultipleChoice) Load(modelNameOrPath string, config interfac
 		return err
 	}
 
-	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
 	mc.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
@@ -377,7 +373,7 @@ func NewRobertaForTokenClassification(p nn.Path, config *bert.BertConfig) *Rober
 // Load loads model from file or model name. It also updates default configuration parameters if provided.
 //
 // This method implements `PretrainedModel` interface.
-func (tc *RobertaForTokenClassification) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+func (tc *RobertaForTokenClassification) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, vs nn.VarStore) error {
 	var urlOrFilename string
 	// If modelName, infer to default configuration filename:
 	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
@@ -392,7 +388,6 @@ func (tc *RobertaForTokenClassification) Load(modelNameOrPath string, config int
 		return err
 	}
 
-	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
 	roberta := bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
@@ -448,7 +443,7 @@ func NewRobertaForQuestionAnswering(p nn.Path, config *bert.BertConfig) *Roberta
 // Load loads model from file or model name. It also updates default configuration parameters if provided.
 //
 // This method implements `PretrainedModel` interface.
-func (qa *RobertaForQuestionAnswering) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+func (qa *RobertaForQuestionAnswering) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, vs nn.VarStore) error {
 	var urlOrFilename string
 	// If modelName, infer to default configuration filename:
 	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
@@ -463,7 +458,6 @@ func (qa *RobertaForQuestionAnswering) Load(modelNameOrPath string, config inter
 		return err
 	}
 
-	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
 	roberta := bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sugarme/gotch"
+	"github.com/sugarme/gotch/nn"
 
 	"github.com/sugarme/transformer"
 	"github.com/sugarme/transformer/bert"
@@ -39,7 +40,7 @@ func TestModelFromPretrained_LocalFile(t *testing.T) {
 	}
 
 	var model *bert.BertForMaskedLM = new(bert.BertForMaskedLM)
-	if err := transformer.LoadModel(model, "bert-base-uncased", config, nil, gotch.CPU); err != nil {
+	if err := transformer.LoadModel(model, "bert-base-uncased", config, nil, nn.NewVarStore(gotch.CPU)); err != nil {
 		t.Error(err)
 	}
 

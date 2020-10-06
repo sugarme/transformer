@@ -2,9 +2,12 @@ package pipeline
 
 import (
 	"fmt"
+	"log"
 	"reflect"
+	"strings"
 
 	"github.com/sugarme/gotch"
+	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
 	"github.com/sugarme/tokenizer"
 
@@ -33,8 +36,8 @@ type QAExample struct {
 }
 
 type QAFeature struct {
-	InputIds         []int
-	AttentionMask    []int
+	InputIds         []int64
+	AttentionMask    []int64
 	TokenToOriginMap map[int]int
 	PMask            []int8
 	ExampleIndex     int
@@ -165,7 +168,7 @@ type QuestionAnsweringModel struct {
 	maxQueryLen  int
 	maxAnswerLen int
 	qaModel      pretrained.Model
-	// varstore     nn.VarStore
+	varstore     nn.VarStore
 }
 
 // NewQuesitonAnswerModel creates new corresponding QuestionAnswerModel using pretrained data from config.
@@ -222,7 +225,7 @@ func newBertQAModel(config *QuestionAnsweringConfig) (*bert.BertForQuestionAnswe
 		return nil, err
 	}
 	var model *bert.BertForQuestionAnswering = new(bert.BertForQuestionAnswering)
-	if err := transformer.LoadModel(model, config.ModelNameOrPath, bertConfig, nil, config.Device); err != nil {
+	if err := transformer.LoadModel(model, config.ModelNameOrPath, bertConfig, nil, nn.NewVarStore(config.Device)); err != nil {
 		return nil, err
 	}
 
@@ -292,9 +295,194 @@ func newRobertaQAModel(config *QuestionAnsweringConfig) (*roberta.RobertaForQues
 		return nil, err
 	}
 	var model *roberta.RobertaForQuestionAnswering = new(roberta.RobertaForQuestionAnswering)
-	if err := transformer.LoadModel(model, config.ModelNameOrPath, bertConfig, nil, config.Device); err != nil {
+	if err := transformer.LoadModel(model, config.ModelNameOrPath, bertConfig, nil, nn.NewVarStore(config.Device)); err != nil {
 		return nil, err
 	}
 
 	return model, nil
+}
+
+// Predict performs extractive question answering given a list of `QaInputs`
+func (qa *QuestionAnsweringModel) Predict(qaInputs []QAInput, topK int64, batchSize int) [][]Answer {
+
+	var (
+		examples []QAExample
+		features []QAFeature
+	)
+	for _, input := range qaInputs {
+		example := NewQAExample(input.Question, input.Context)
+		examples = append(examples, *example)
+	}
+
+	for idx, example := range examples {
+		feat := qa.generateFeatures(example, qa.maxSeqLen, qa.maxQueryLen, qa.docStride, idx)
+		features = append(features, feat...)
+	}
+
+	var exampleTopKAnswers map[int][]Answer = make(map[int][]Answer)
+	start := 0
+	for start < len(features) {
+		end := start + len(features) - start
+		if batchSize < len(features)-start {
+			end = start + batchSize
+		}
+		batchFeatures := features[start:end]
+		var (
+			inputIds, attentionsMasks []ts.Tensor
+		)
+
+		ts.NoGrad(func() {
+			for _, feat := range features {
+				inputTs := ts.MustOfSlice(feat.InputIds)
+				inputIds = append(inputIds, inputTs)
+				atnMaskTs := ts.MustOfSlice(feat.AttentionMask)
+				attentionsMasks = append(attentionsMasks, atnMaskTs)
+			}
+
+			inputTsTmp := ts.MustStack(inputIds, 0)
+			inputTs := inputTsTmp.MustTo(qa.varstore.Device(), true)
+			attentionsTmp := ts.MustStack(attentionsMasks, 0)
+			attentionsTs := attentionsTmp.MustTo(qa.varstore.Device(), true)
+
+			var (
+				startLogits, endLogits ts.Tensor
+				err                    error
+			)
+
+			switch reflect.TypeOf(qa.qaModel).Name() {
+			case "Bert":
+				startLogits, endLogits, _, _, err = qa.qaModel.(*bert.BertForQuestionAnswering).ForwardT(inputTs, attentionsTs, ts.None, ts.None, ts.None, false)
+				if err != nil {
+					log.Fatal(err)
+				}
+			case "Roberta":
+				startLogits, endLogits, _, _, err = qa.qaModel.(*roberta.RobertaForQuestionAnswering).ForwardT(inputTs, attentionsTs, ts.None, ts.None, ts.None, false)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+			// TODO: update more models here.
+
+			default:
+				log.Fatal("Unsupported Model type '%v'", reflect.TypeOf(qa.qaModel).Name())
+			}
+
+			startLogits.MustDetach_()
+			endLogits.MustDetach_()
+
+			var exampleIndexToFeatureEndPosition [][]int // slice of 2 elements - exampleId, maxFeatureId
+
+			for idx, feat := range batchFeatures {
+				exampleIndexToFeatureEndPosition = append(exampleIndexToFeatureEndPosition, []int{feat.ExampleIndex, idx + 1})
+			}
+
+			featureIdStart := 0
+			for _, item := range exampleIndexToFeatureEndPosition {
+				// item[0] is exampleId
+				// item[1] is maxFeatureId
+				var answers []Answer
+				example := examples[item[0]]
+				for featIdx := featureIdStart; featIdx < item[1]; featIdx++ {
+					feature := batchFeatures[featIdx]
+					start := startLogits.MustGet(featIdx)
+					end := endLogits.MustGet(featIdx)
+					pMask := ts.MustOfSlice(feature.PMask).MustSub1(ts.IntScalar(1), true).MustAbs(true).MustTo(start.MustDevice(), true)
+
+					startTmpDiv := start.MustExp(false).MustSum(gotch.Float, false).MustMul(pMask, false)
+					startOut := start.MustExp(false).MustDiv(startTmpDiv, true)
+					start.MustDrop()
+
+					endTmpDiv := end.MustExp(false).MustSum(gotch.Float, false).MustMul(pMask, false)
+					endOut := endTmpDiv.MustExp(false).MustDiv(endTmpDiv, true)
+					end.MustDrop()
+
+					starts, ends, scores := qa.decode(startOut, endOut, topK)
+
+					for idx := 0; idx < len(starts); idx++ {
+						startPos := feature.TokenToOriginMap[int(starts[idx])]
+						endPos := feature.TokenToOriginMap[int(ends[idx])]
+						answer := strings.Join(example.DocTokens[startPos:endPos+1], " ")
+
+						var start, end int
+
+						for i, v := range example.CharToWordOffset {
+							if v == startPos {
+								start = i
+								break
+							}
+						}
+
+						// Reverse
+						for i := len(example.CharToWordOffset); i > 0; i-- {
+							if example.CharToWordOffset[i] == endPos {
+								end = i
+								break
+							}
+						}
+
+						answers = append(answers, Answer{
+							Score:  scores[idx],
+							Start:  start,
+							End:    end,
+							Answer: answer,
+						})
+					}
+				}
+
+				featureIdStart = item[1]
+				exampleAnswers := exampleTopKAnswers[item[0]]
+				exampleAnswers = append(exampleAnswers, answers...)
+			}
+
+		}) // end of ts.NoGrad
+
+		start = end
+	}
+
+	var allAnswers [][]Answer
+
+	for exampleId := 0; exampleId < len(examples); exampleId++ {
+		if answers, ok := exampleTopKAnswers[exampleId]; ok {
+			answers := removeAnswerDuplicates(answers)
+			allAnswers = append(allAnswers, answers)
+		} else {
+			allAnswers = append(allAnswers, []Answer{})
+		}
+	}
+
+	return allAnswers
+}
+
+func removeAnswerDuplicates(answers []Answer) []Answer {
+	var res []Answer
+
+	for _, a := range answers {
+		if !isAnswerExist(res, a) {
+			res = append(res, a)
+		}
+	}
+
+	return res
+}
+
+func isAnswerExist(answers []Answer, a Answer) bool {
+	for _, answer := range answers {
+		if reflect.DeepEqual(answer, a) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (qa *QuestionAnsweringModel) generateFeatures(qaExample QAExample, maxSeqLen, docStride, maxQueryLen, exampleIdx int) []QAFeature {
+
+	// TODO: implement
+	panic("Not implemented yet.")
+}
+
+func (qa *QuestionAnsweringModel) decode(start, end ts.Tensor, topK int64) ([]int64, []int64, []float64) {
+	// TODO: implement
+
+	panic("Have not implemented yet!")
 }

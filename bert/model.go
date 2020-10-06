@@ -245,7 +245,7 @@ func NewBertForMaskedLM(p nn.Path, config *BertConfig) *BertForMaskedLM {
 // Load loads model from file or model name. It also updates
 // default configuration parameters if provided.
 // This method implements `PretrainedModel` interface.
-func (mlm *BertForMaskedLM) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+func (mlm *BertForMaskedLM) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, vs nn.VarStore) error {
 	var urlOrFilename string
 	// If modelName, infer to default configuration filename:
 	if modelFile, ok := pretrained.BertModels[modelNameOrPath]; ok {
@@ -260,7 +260,6 @@ func (mlm *BertForMaskedLM) Load(modelNameOrPath string, config interface{ pretr
 		return err
 	}
 
-	vs := nn.NewVarStore(device)
 	p := vs.Root()
 	mlm.bert = NewBertModel(p.Sub("bert"), config.(*BertConfig))
 	mlm.cls = NewBertLMPredictionHead(p.Sub("cls"), config.(*BertConfig))
@@ -587,7 +586,7 @@ func NewBertForQuestionAnswering(p nn.Path, config *BertConfig) *BertForQuestion
 // Load loads model from file or model name. It also updates
 // default configuration parameters if provided.
 // This method implements `PretrainedModel` interface.
-func (qa *BertForQuestionAnswering) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
+func (qa *BertForQuestionAnswering) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, vs nn.VarStore) error {
 	var urlOrFilename string
 	// If modelName, infer to default configuration filename:
 	if modelFile, ok := pretrained.BertModels[modelNameOrPath]; ok {
@@ -602,7 +601,6 @@ func (qa *BertForQuestionAnswering) Load(modelNameOrPath string, config interfac
 		return err
 	}
 
-	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
 	bert := NewBertModel(p.Sub("bert"), config.(*BertConfig))
