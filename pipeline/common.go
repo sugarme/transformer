@@ -2,7 +2,7 @@ package pipeline
 
 import (
 	"log"
-	"reflect"
+	// "reflect"
 
 	"github.com/sugarme/tokenizer"
 	"github.com/sugarme/tokenizer/model/wordpiece"
@@ -62,14 +62,13 @@ const (
 	AlbertTokenizer
 )
 
-/*
- * // TokenizerOption specifies a tokenizer
- * type TokenizerOption struct {
- *   model     ModelType
- *   tokenizer *tokenizer.Tokenizer
- * }
- *
- * // ConfigOption methods:
+// TokenizerOption specifies a tokenizer
+type TokenizerOption struct {
+	model     ModelType
+	tokenizer *tokenizer.Tokenizer
+}
+
+/* // ConfigOption methods:
  * // =====================
  *
  * // ConfigOptionFromFile loads configuration for corresponding model type from file.

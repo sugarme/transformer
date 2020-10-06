@@ -9,3 +9,8 @@ import (
 )
 
 type TokenClassificationModel struct{}
+
+func (tc *TokenClassificationModel) Predict(input []string, var1, var2 bool) []Entity {
+
+	panic("Not implemented yet!")
+}
