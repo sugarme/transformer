@@ -66,9 +66,10 @@ func TestBertForMaskedLM(t *testing.T) {
 
 	// Model
 	device := gotch.CPU
+	vs := nn.NewVarStore(device)
 
 	model := new(bert.BertForMaskedLM)
-	err = model.Load("../data/bert/model.ot", config, nil, device)
+	err = model.Load("../data/bert/model.ot", config, nil, vs)
 	if err != nil {
 		t.Error(err)
 	}

@@ -1,7 +1,7 @@
 package transformer
 
 import (
-	"github.com/sugarme/gotch"
+	"github.com/sugarme/gotch/nn"
 	"github.com/sugarme/transformer/pretrained"
 )
 
@@ -17,6 +17,6 @@ import (
 // environment if existing, otherwise it will be cached in `$HOME/.cache/transformers/` directory.
 // If `modleNameOrPath` is valid URL, file will be downloaded and cached.
 // Finally, model weights will be loaded to `varstore`.
-func LoadModel(model pretrained.Model, modelNameOrPath string, config pretrained.Config, customParams map[string]interface{}, device gotch.Device) error {
-	return model.Load(modelNameOrPath, config, customParams, device)
+func LoadModel(model pretrained.Model, modelNameOrPath string, config pretrained.Config, customParams map[string]interface{}, vs nn.VarStore) error {
+	return model.Load(modelNameOrPath, config, customParams, vs)
 }
