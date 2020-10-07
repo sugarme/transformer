@@ -12,20 +12,84 @@ var MultiSepTokensTokenizers []string = []string{
 
 // Example is a single training/test example for the Squad dataset, as loaded from disk.
 type Example struct {
-	QAsId             string   // example unique identification
-	QuestionText      string   // question string
-	ContextText       string   // context string
-	AnswerText        string   // answer string
-	StartPositionChar int      // Character position of the start of the answer
-	Title             string   // Title of the example
-	Answers           []Answer // Default = nil. Holds answers as well as their start positions
-	IsImposible       bool     // Default = false. Set to true if the example has no possible answer.
+	QAsId            string   // example unique identification
+	QuestionText     string   // question string
+	ContextText      string   // context string
+	AnswerText       string   // answer string
+	Title            string   // Title of the example
+	Answers          []Answer // Default = nil. Holds answers as well as their start positions
+	IsImposible      bool     // Default = false. Set to true if the example has no possible answer.
+	StartPosition    int
+	EndPosition      int
+	DocTokens        []string // word tokens of the context.
+	CharToWordOffset []int    // offset of docToken
 }
 
-func NewExample(qasId int, question, context, answer string, startPositionChar int, title string, answers []Answer, isImpossible bool) *Example {
+// NewExample creates a Example.
+//
+// startPositionChar is character position of the start of the answer.
+func NewExample(qasId string, question, context, answer string, startPositionChar int, title string, answers []Answer, isImpossible bool) *Example {
+
+	start, end := 0, 0
+
+	// Split on whitespace so that different tokens may be attributed to their original position.
+	docTokens, charToWordOffset := splitContext(context)
+
+	// Start and end positions only has a value during evaluation.
+	if startPositionChar != -1 && !isImpossible {
+		start = charToWordOffset[startPositionChar]
+		end = charToWordOffset[startPositionChar+len(answer)-1]
+		if (startPositionChar + len(answer)) > len(charToWordOffset) {
+			end = charToWordOffset[len(charToWordOffset)-1]
+		}
+	}
 
 	// TODO: implement
-	return &Example{}
+	return &Example{
+		QAsId:            qasId,
+		QuestionText:     question,
+		ContextText:      context,
+		AnswerText:       answer,
+		Title:            title,
+		DocTokens:        docTokens,
+		CharToWordOffset: charToWordOffset,
+		StartPosition:    start,
+		EndPosition:      end,
+	}
+}
+
+// splitContext splits input text on 'whitespace'.
+// It returns tokens and their corresponding offsets.
+// TODO: need a unit test
+func splitContext(context string) (splits []string, offsets []int) {
+	var docTokens []string
+	var charToWordOffset []int
+	var currentWord []rune
+	var previousWhiteSpace bool = false
+
+	for _, char := range context {
+		charToWordOffset = append(charToWordOffset, len([]byte(string(char))))
+		if isWhiteSpace(char) {
+			previousWhiteSpace = true
+			if len(currentWord) > 0 {
+				docTokens = append(docTokens, string(currentWord))
+			}
+		} else {
+			if previousWhiteSpace {
+				currentWord = nil
+			}
+
+			currentWord = append(currentWord, char)
+			previousWhiteSpace = false
+		}
+	}
+
+	// Last word
+	if len(currentWord) > 0 {
+		docTokens = append(docTokens, string(currentWord))
+	}
+
+	return docTokens, charToWordOffset
 }
 
 // Answer is Squad answer struct.
@@ -126,10 +190,15 @@ func isWhiteSpace(char rune) bool {
 
 func ConvertExampleToFeatures(example Example, maxSeqLen int, docStride, maxQueryLen, paddingStrategy, isTraining bool) []Features {
 
-	// var features []Features
-	if isTraining {
+	var (
+		features                   []Features
+		startPosition, endPosition int
+	)
+
+	if isTraining && !example.IsImposible {
 		// Get start and end position
-		// startPosition := example.
+		startPosition = example.StartPosition
+		endPosition = example.EndPosition
 	}
 
 	// TODO: implement
