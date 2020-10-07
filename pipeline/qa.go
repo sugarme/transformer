@@ -508,8 +508,24 @@ func (qa *QuestionAnsweringModel) decode(start, end ts.Tensor, topK int64) ([]in
 	return startOut, endOut, scores
 }
 
+// TODO: add comments to explain parameters.
 func (qa *QuestionAnsweringModel) generateFeatures(qaExample QAExample, maxSeqLen, docStride, maxQueryLen, exampleIdx int) []QAFeature {
 
+	var tokToOriginIndex []int
+	var allDocTokens []string
+
+	for idx, token := range qaExample.DocTokens {
+		subTokens, err := qa.tokenizer.Encode(token, false)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, subtok := range subTokens.Tokens {
+			allDocTokens = append(allDocTokens, subtok)
+			tokToOriginIndex = append(tokToOriginIndex, idx)
+		}
+	}
+
 	// TODO: implement
+
 	panic("Not implemented yet.")
 }
