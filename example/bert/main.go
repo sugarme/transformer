@@ -16,8 +16,8 @@ import (
 )
 
 func main() {
-	// bertForMaskedLM()
-	bertForSequenceClassification()
+	bertForMaskedLM()
+	// bertForSequenceClassification()
 }
 
 func getBert() (retVal *tokenizer.Tokenizer) {
@@ -66,7 +66,7 @@ func bertForMaskedLM() {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../../data/bert/config.json")
+	config, _ := bert.ConfigFromFile("../../data/bert/config.json")
 	// fmt.Printf("Bert Configuration:\n%+v\n", config)
 
 	model := bert.NewBertForMaskedLM(vs.Root(), config)
@@ -139,7 +139,7 @@ func bertForSequenceClassification() {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../../data/bert/config.json")
+	config, _ := bert.ConfigFromFile("../../data/bert/config.json")
 
 	var dummyLabelMap map[int64]string = make(map[int64]string)
 	dummyLabelMap[0] = "positive"
