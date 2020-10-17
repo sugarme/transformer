@@ -1,7 +1,15 @@
 package squad
 
 import (
+	"fmt"
+	"log"
+	// "reflect"
+	"strings"
+
 	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/tokenizer"
+	// util "github.com/sugarme/tokenizer/util/slice"
+	// "github.com/sugarme/transformer/pretrained"
 )
 
 var MultiSepTokensTokenizers []string = []string{
@@ -161,7 +169,7 @@ func NewResult(uniqueId string, start, end ts.Tensor, startStopIndex, endStopInd
 }
 
 // improveAnswerSpan returns answer spans that better match the annotated answer.
-func improveAnswerSpan(docTokens []string, inputStart, inputEnd ts.Tensor, originAnswerText string) (ts.Tensor, ts.Tensor) {
+func improveAnswerSpan(docTokens []string, inputStart, inputEnd int, tk *tokenizer.Tokenizer, originAnswerText string) (int, int) {
 
 	// TODO: implement
 	panic("has not been implemented yet.")
@@ -188,7 +196,9 @@ func isWhiteSpace(char rune) bool {
 	return false
 }
 
-func ConvertExampleToFeatures(example Example, maxSeqLen int, docStride, maxQueryLen, paddingStrategy, isTraining bool) []Features {
+// ConvertExampleToFeatures converts input a single example to features.
+// TODO: add explaination
+func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, example Example, maxSeqLen, docStride, maxQueryLen int, paddingStrategy, isTraining bool) []Features {
 
 	var (
 		features                   []Features
@@ -199,8 +209,73 @@ func ConvertExampleToFeatures(example Example, maxSeqLen int, docStride, maxQuer
 		// Get start and end position
 		startPosition = example.StartPosition
 		endPosition = example.EndPosition
+
+		// If the answer cannot be found in the text, skip this example.
+		actualText := strings.Join(example.DocTokens[startPosition:endPosition], " ")
+		cleanedAnswerText := strings.Join(whitespaceTokenize(example.AnswerText), " ")
+		if !strings.Contains(actualText, cleanedAnswerText) {
+			fmt.Printf("Could not find answer: '%s' vs. '%s'\n", actualText, cleanedAnswerText)
+			return []Features{}
+		}
 	}
 
+	var (
+		tokToOriginIndex []int
+		originToTokIndex []int
+		allDocTokens     []string
+	)
+
+	for i, token := range example.DocTokens {
+		originToTokIndex = append(originToTokIndex, len(token))
+		en, err := tk.Encode(tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(token)), false)
+		if err != nil {
+			log.Fatal(err)
+		}
+		subTokens := en.GetTokens()
+		for _, subTok := range subTokens {
+			tokToOriginIndex = append(tokToOriginIndex, i)
+			allDocTokens = append(allDocTokens, subTok)
+		}
+	}
+
+	var (
+		tokStartPosition, tokEndPosition int
+	)
+
+	if isTraining && !example.IsImposible {
+		tokStartPosition = originToTokIndex[example.StartPosition]
+		tokEndPosition = len(allDocTokens) - 1
+		if example.EndPosition < len(example.DocTokens)-1 {
+			tokEndPosition = originToTokIndex[example.EndPosition+1] - 1
+		}
+
+		tokStartPosition, tokEndPosition = improveAnswerSpan(allDocTokens, tokStartPosition, tokEndPosition, tk, example.AnswerText)
+	}
+
+	// TODO: verify whether we need to modify `tokenizer.trunc` - TruncationParam
+	truncParams := tokenizer.TruncationParams{
+		MaxLength: maxQueryLen,
+		Strategy:  tokenizer.OnlySecond,
+		Stride:    docStride,
+	}
+	tk.WithTruncation(&truncParams)
+
+	encoding, err := tk.EncodePair(example.QuestionText, example.ContextText, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("encoding: %+v\n\n", encoding)
+
+	return features
+
 	// TODO: implement
-	panic("has not been implemented yet.")
+	// panic("has not been implemented yet.")
+}
+
+// whitespaceTokenize runs basic whitespace cleaning and splitting
+// on a piece of text.
+func whitespaceTokenize(text string) []string {
+	stripText := strings.TrimSpace(text)
+	return strings.Split(stripText, " ")
 }
