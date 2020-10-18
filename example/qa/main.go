@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
-	"strings"
+	// "strings"
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
@@ -11,7 +11,7 @@ import (
 	"github.com/sugarme/tokenizer"
 	"github.com/sugarme/tokenizer/decoder"
 	"github.com/sugarme/tokenizer/model/wordpiece"
-	"github.com/sugarme/tokenizer/normalizer"
+	// "github.com/sugarme/tokenizer/normalizer"
 	"github.com/sugarme/tokenizer/pretokenizer"
 	"github.com/sugarme/tokenizer/processor"
 	"github.com/sugarme/tokenizer/util"
@@ -32,7 +32,6 @@ func main() {
 	vs := nn.NewVarStore(device)
 
 	model := bert.NewBertForQuestionAnswering(vs.Root(), config)
-	fmt.Printf("model: %v\n", model)
 	err = vs.Load("../../data/bert/bert-qa.ot")
 	if err != nil {
 		log.Fatalf("Load model weight error: \n%v", err)
@@ -95,9 +94,10 @@ More severe and rare neurological complications such as strokes, brain inflammat
 People of all ages who experience fever and/or cough associated with difficulty breathing or shortness of breath, chest pain or pressure, or loss of speech or movement should seek medical care immediately. If possible, call your health care provider, hotline or health facility first, so you can be directed to the right clinic.
 `
 	// question := "How covid 19 spreads?"
-	// question := "what are symptoms of covid 19?"
-	question := "what are severe signs of covid 19?"
-	// question := "what are uncommon signs of covid 19?" // NOTE. Will be panic due to `answerStart` > `answerEnd`
+	// question := "What are symptoms of covid 19?"
+	// question := "What are severe signs of covid 19?"
+	// question := "What are uncommon signs of covid 19?" // NOTE. Will be panic due to `answerStart` > `answerEnd`
+	question := "What is covid 19?"
 
 	encoding, err := tk.EncodePair(question, context, true)
 	if err != nil {
@@ -111,19 +111,18 @@ People of all ages who experience fever and/or cough associated with difficulty 
 	tokenTypeIds := ts.MustOfSlice(toInt64(encoding.TypeIds)).MustTo(device, true).MustView([]int64{batchSize, seqLen}, true)
 	// positionIds := ts.MustOfSlice(toInt64(encoding.Words)).MustTo(device, true).MustView([]int64{batchSize, seqLen}, true).MustExpand([]int64{batchSize, seqLen}, true, true)
 
-	positionIds := ts.MustArange(ts.IntScalar(seqLen), gotch.Int64, device).MustExpand([]int64{batchSize, seqLen}, true, true)
-	mask := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
+	// positionIds := ts.MustArange(ts.IntScalar(seqLen), gotch.Int64, device).MustExpand([]int64{batchSize, seqLen}, true, true)
+	// mask := ts.MustOnes([]int64{batchSize, seqLen}, gotch.Int64, device)
 
 	var startScores, endScores ts.Tensor
 	ts.NoGrad(func() {
-		startScores, endScores, _, _, err = model.ForwardT(inputTensor, mask, tokenTypeIds, positionIds, ts.None, false)
+		startScores, endScores, _, _, err = model.ForwardT(inputTensor, ts.None, tokenTypeIds, ts.None, ts.None, false)
 		if err != nil {
 			log.Fatal(err)
 		}
 	})
 
 	answerStart := startScores.MustGet(0).MustArgmax(0, false, false).Int64Values()[0]
-
 	answerEnd := endScores.MustGet(0).MustArgmax(0, false, false).Int64Values()[0]
 
 	fmt.Printf("answer start: '%v'\n", answerStart)
@@ -133,17 +132,19 @@ People of all ages who experience fever and/or cough associated with difficulty 
 	// the highest total score for which end >= start
 	// TODO. implement it (pytorch topK) to find topK scores with pair(start, end)
 	// then pick the highest score where start < end
-	answerTokens := encoding.Tokens[answerStart : answerEnd+1]
+	// answerTokens := encoding.Tokens[answerStart : answerEnd+1]
 	answerIds := encoding.Ids[answerStart : answerEnd+1]
 	if int(answerEnd) >= len(encoding.Tokens) {
-		answerTokens = encoding.Tokens[answerStart:answerEnd]
+		// answerTokens = encoding.Tokens[answerStart:answerEnd]
 		answerIds = encoding.Ids[answerStart:answerEnd]
 	}
 
 	answerStr := tk.Decode(answerIds, false)
 
-	fmt.Printf("context: '%v'\n", strings.Join(encoding.Tokens, " "))
-	fmt.Printf("Answer: '%v'\n", strings.Join(answerTokens, " "))
+	// fmt.Printf("context: '%v'\n", strings.Join(encoding.Tokens, " "))
+	// fmt.Printf("Answer: '%v'\n", strings.Join(answerTokens, " "))
+	fmt.Printf("Context: %v\n", context)
+	fmt.Printf("Question: '%v'\n", question)
 	fmt.Printf("Answer: '%v'\n", answerStr)
 
 }
@@ -178,8 +179,8 @@ func getBert() *tokenizer.Tokenizer {
 
 	tk := tokenizer.NewTokenizer(model)
 
-	bertNormalizer := normalizer.NewBertNormalizer(true, true, true, true)
-	tk.WithNormalizer(bertNormalizer)
+	// bertNormalizer := normalizer.NewBertNormalizer(true, true, true, true)
+	// tk.WithNormalizer(bertNormalizer)
 
 	bertPreTokenizer := pretokenizer.NewBertPreTokenizer()
 	tk.WithPreTokenizer(bertPreTokenizer)
