@@ -33,6 +33,10 @@ github.com/sugarme/tokenizer v0.1.9 h1:g2aUKW1IEUEc0U2yV4cMum1q9x6dQjDH0DG27FOqp
 github.com/sugarme/tokenizer v0.1.9/go.mod h1:wWYRXP/V4NRVKAeX0bJwIM4qQsFEjdC7PKNpUm1pxeI=
 github.com/sugarme/tokenizer v0.1.10 h1:IvsA0P+Yk5nFvz67imE6Q91sg9TqT5AyTKxuo+vT0rc=
 github.com/sugarme/tokenizer v0.1.10/go.mod h1:wWYRXP/V4NRVKAeX0bJwIM4qQsFEjdC7PKNpUm1pxeI=
+github.com/sugarme/tokenizer v0.1.11 h1:3b48vPmt0kgb/TQA111aU+k+ticbMfnCowB9hQW/Bxc=
+github.com/sugarme/tokenizer v0.1.11/go.mod h1:wWYRXP/V4NRVKAeX0bJwIM4qQsFEjdC7PKNpUm1pxeI=
+github.com/sugarme/tokenizer v0.1.12 h1:ebb+srYlnbRpFnyEwd31x+0ZKZ3HxBZWflhUaMasaPs=
+github.com/sugarme/tokenizer v0.1.12/go.mod h1:wWYRXP/V4NRVKAeX0bJwIM4qQsFEjdC7PKNpUm1pxeI=
 golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e h1:vcxGaoTs7kV8m5Np9uUNQin4BrLOthgV7252N8V+FwY=
 golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208 h1:qwRHBd0NqMbJxfbotnDhm2ByMI1Shq4Y6oRJo21SGJA=

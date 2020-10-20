@@ -8,15 +8,8 @@ import (
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
-	"github.com/sugarme/tokenizer"
-	"github.com/sugarme/tokenizer/decoder"
-	"github.com/sugarme/tokenizer/model/wordpiece"
-	// "github.com/sugarme/tokenizer/normalizer"
-	"github.com/sugarme/tokenizer/pretokenizer"
-	"github.com/sugarme/tokenizer/processor"
-	"github.com/sugarme/tokenizer/util"
+	"github.com/sugarme/tokenizer/pretrained"
 	"github.com/sugarme/transformer/bert"
-	// "github.com/sugarme/tokenizer/pretrained"
 )
 
 func main() {
@@ -41,8 +34,8 @@ func main() {
 	fmt.Printf("Num of variables: %v\n", len(vs.Variables()))
 
 	// NOTE. BERT finetuned for question answering used different vocab file.
-	// tk := pretrained.BertBaseUncased()
-	tk := getBert()
+	tk := pretrained.BertLargeCasedWholeWordMaskingSquad()
+	// tk := getBert()
 
 	// question := "How many parameters does BERT-large have?"
 	// context := "BERT-large is really big... it has 24-layers and an embedding size of 1,024, for a total of 340M parameters! Altogether it is 1.34GB, so expect it to take a couple minutes to download to your Colab instance."
@@ -166,46 +159,4 @@ func filterPosition(data []int) []int {
 		}
 	}
 	return filterData
-}
-
-func getBert() *tokenizer.Tokenizer {
-
-	util.CdToThis()
-	vocabFile := "../../data/bert/vocab-qa.txt"
-	model, err := wordpiece.NewWordPieceFromFile(vocabFile, "[UNK]")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	tk := tokenizer.NewTokenizer(model)
-
-	// bertNormalizer := normalizer.NewBertNormalizer(true, true, true, true)
-	// tk.WithNormalizer(bertNormalizer)
-
-	bertPreTokenizer := pretokenizer.NewBertPreTokenizer()
-	tk.WithPreTokenizer(bertPreTokenizer)
-
-	sepId, ok := tk.TokenToId("[SEP]")
-	if !ok {
-		log.Fatalf("Cannot find ID for [SEP] token.\n")
-	}
-	sep := processor.PostToken{Id: sepId, Value: "[SEP]"}
-
-	clsId, ok := tk.TokenToId("[CLS]")
-	if !ok {
-		log.Fatalf("Cannot find ID for [CLS] token.\n")
-	}
-	cls := processor.PostToken{Id: clsId, Value: "[CLS]"}
-
-	postProcess := processor.NewBertProcessing(sep, cls)
-	tk.WithPostProcessor(postProcess)
-
-	tk.AddSpecialTokens([]tokenizer.AddedToken{tokenizer.NewAddedToken("[MASK]", true)})
-	tk.AddSpecialTokens([]tokenizer.AddedToken{tokenizer.NewAddedToken("[SEP]", true)})
-	tk.AddSpecialTokens([]tokenizer.AddedToken{tokenizer.NewAddedToken("[CLS]", true)})
-
-	wpDecoder := decoder.NewWordPieceDecoder("##", true)
-	tk.WithDecoder(wpDecoder)
-
-	return tk
 }
