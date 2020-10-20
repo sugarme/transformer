@@ -13,7 +13,7 @@ import (
 
 var MultiSepTokensTokenizers []string = []string{
 	"roberta",
-	"camebert",
+	"camembert",
 	"bart",
 }
 
@@ -99,11 +99,6 @@ func splitContext(context string) (splits []string, offsets []int) {
 	return docTokens, charToWordOffset
 }
 
-// Answer is Squad answer struct.
-type Answer struct {
-	// TODO: add fields.
-}
-
 // Features are SINGLE squad example features to be fed to the model.
 //
 // Those features are model-specific and can be crafted using method `SquadExample.ConvertExampleToFeatures`.
@@ -120,10 +115,9 @@ type Features struct {
 	TokenIsMaxContext []bool // A bool slice identifying which tokens have their maximum context in this feature.
 	// NOTE. If a token does not have their maximum context in this feature, it means that another feature has more
 	// information related to that token and should be prioritized over this feature for that token.
-	Tokens         []string    // Slice of tokens corresponding to the input Ids.
-	TokenToOrigMap map[int]int // Mapping between the tokens and the original text needed in order to identify the answer.
-	StartPosition  int         // Start of the answer token index.
-	EndPosition    int         // End of the answer token index.
+	Tokens        []string // Slice of tokens corresponding to the input Ids.
+	StartPosition int      // Start of the answer token index.
+	EndPosition   int      // End of the answer token index.
 }
 
 // NewFeature creates new Squad Features.
@@ -139,10 +133,9 @@ func NewFeature(inputIds []int, attentionMask []int, tokenTypeIds []int, clsInde
 		ParagraphLen:      paragraphLen,
 		TokenIsMaxContext: tokenIsMaxContext,
 		Tokens:            tokens,
-		// TokenToOrigMap:    tokenToOrigMap,
-		StartPosition: startPosition,
-		EndPosition:   endPosition,
-		QAsId:         "",
+		StartPosition:     startPosition,
+		EndPosition:       endPosition,
+		QAsId:             "",
 	}
 }
 
@@ -225,7 +218,6 @@ func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, example Example, sepToken
 	spans = append(spans, encoding.Overflowing...)
 
 	for spanIndex, span := range spans {
-
 		// 2. pMask
 		var pMask []int
 		var sepIdx int
@@ -233,14 +225,16 @@ func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, example Example, sepToken
 		for i, tok := range span.Tokens {
 			if tok == sepToken {
 				sepIdx = i
+				break
 			}
 		}
 		for i := 0; i < len(span.Tokens); i++ {
 			// Mask question tokens
 			if i <= sepIdx {
 				pMask = append(pMask, 1)
+			} else {
+				pMask = append(pMask, 0)
 			}
-			pMask = append(pMask, 0)
 
 			// determine whether token is "Max Context"
 			isMaxCtx := isMaxContext(spans, spanIndex, span.Words[i])
@@ -296,15 +290,16 @@ func isMaxContext(docSpans []tokenizer.Encoding, currentSpanIndex, position int)
 // Params:
 // - examples: Slice of Examples to convert
 // - tk: corresponding Tokenizer to be used with the model
-// - tkName: name of tokenizer (whether it uses multiple sep tokens)
+// - tkName: name of tokenizer (whether it uses multiple sep tokens: ["roberta", "bart", "camebert"]).
 // - maxSeqLen: maximal length of the input sequence to feed into the model (count in number of tokens)
 // - maxQueryLen: maximal length of the question (count in number of tokens)
 // - docStride: the stride (step size) tokenizer will use to split the encoding overflowing if it occurs.
 // 	 E.g. total overflowing tokens=20, maxSeqLen=10, docStride=5, there will be 4 encodings of 10 tokens.
 // - sepToken: sep token used in tokenizer (e.g. BERT tokenizer uses "[SEP]")
+// - padToken: pad token used in tokenizer (e.g. BERT tokenizer uses "[PAD]")
 // - clsIndex: index position of the cls token in encoded input after tokenizing (e.g. BERT tokenizer [CLS] index = 0)
-func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkName string, maxSeqLen, docStride, maxQueryLen int, sepToken string, clsIndex int, isTraining bool) [][]Features {
-	// TODO: do converting in parallel
+func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkName string, maxSeqLen, docStride, maxQueryLen int, sepToken, padToken string, clsIndex int, isTraining bool) [][]Features {
+	// TODO: setup running in parallel
 	var featuresSet [][]Features
 
 	for _, example := range examples {
@@ -330,12 +325,13 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 		// E.g. BERT tokenizer encodes a pair(question, context) will add 3 special tokens
 		// [CLS] QuestionSequence [SEP] ContextSequence [SEP]
 		// RoBERTa uses 2 sep tokens instead of one.
-		var numAddedTokens int = 2
+		// <s> Question </s> </s> ContextSequence </s>
+		var numAddedTokens int = 3
 		if util.Contain(tkName, MultiSepTokensTokenizers) {
 			numAddedTokens += 1
 		}
 
-		// stride will add in the length of question and number of added tokens.
+		// Step on context only.
 		stride := docStride + len(queryEncoding.Tokens) + numAddedTokens
 
 		// Setup truncation Params
@@ -347,15 +343,18 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 		contextTk.WithTruncation(&truncParams)
 
 		// Setup padding Params
-		padding := tk.GetPadding()
-		paddingStrategy := tokenizer.NewPaddingStrategy() // defaultVal = "BatchLongest"
+		paddingStrategy := tokenizer.NewPaddingStrategy(tokenizer.WithFixed(maxSeqLen)) // fixed length
+		padId, ok := tk.TokenToId(padToken)
+		if !ok {
+			log.Fatalf("'ConvertExampleToFeatures' method call error: cannot find pad token in the vocab.\n")
+		}
 
 		paddingParams := tokenizer.PaddingParams{
 			Strategy:  *paddingStrategy,
 			Direction: tokenizer.Right, // padding right
-			PadId:     padding.PadId,
-			PadTypeId: padding.PadTypeId,
-			PadToken:  padding.PadToken,
+			PadId:     padId,
+			PadTypeId: 1,
+			PadToken:  padToken,
 		}
 		contextTk.WithPadding(&paddingParams)
 

@@ -8,8 +8,6 @@ example/testdata/
 *.dat
 *.log
 
-*.txt
-*.json
 *.bak
 
 data/
