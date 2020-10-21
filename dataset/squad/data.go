@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
+
+	"github.com/sugarme/tokenizer/util"
 )
 
 type Squad2 struct {
@@ -35,10 +38,29 @@ type Answer struct {
 	AnswerStart int    `json:"answer_start"`
 }
 
-func Load() {
+// Load loads SQUAD v2.0 data from file.
+//
+// Param
+// - datasetNameOpt: specify either "train" or "dev" dataset. Default="train"
+func LoadV2(datasetNameOpt ...string) []Example {
+	util.CdToThis()
+	datasetName := "train"
+	if len(datasetNameOpt) > 0 {
+		datasetName = datasetNameOpt[0]
+	}
 
-	// jsonFile, err := os.Open("./dev-v2.0.json")
-	jsonFile, err := os.Open("./train-v2.0.json")
+	var (
+		jsonFile *os.File
+		err      error
+	)
+
+	if datasetName == "train" {
+		jsonFile, err = os.Open("train-v2.0.json")
+	} else if datasetName == "dev" {
+		jsonFile, err = os.Open("dev-v2.0.json")
+	} else {
+		log.Fatalf("Invalid datasetNameOpt: '%v'\n", datasetNameOpt[0])
+	}
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -46,22 +68,38 @@ func Load() {
 
 	byteValue, _ := ioutil.ReadAll(jsonFile)
 
-	// var result map[string]interface{}
 	var squad Squad2
-
 	json.Unmarshal([]byte(byteValue), &squad)
 
-	fmt.Printf("number of samples: %v\n", len(squad.Data))
-	fmt.Printf("Sample 0===================:\n")
-	s := squad.Data[0]
-	fmt.Printf("Title : %+v\n", s.Title)
-	fmt.Printf("Paragraph 0: ==================\n")
-	p := s.Paragraphs[0]
-	fmt.Printf("Context : %+v\n", p.Context)
-	for i, qa := range p.QAs {
-		fmt.Printf("%v-Id:%v- Question: '%v'\nAnswers: %+v\nPlausibleAnswers: %+v\nIsImpossible: %v\n", i, qa.Id, qa.Question, qa.Answers, qa.PlausibleAnswers, qa.IsImposible)
+	examples := createSquad2Examples(&squad)
+
+	return examples
+}
+
+func createSquad2Examples(squad2 *Squad2) []Example {
+	var examples []Example
+
+	for _, doc := range squad2.Data {
+		title := doc.Title
+		for _, p := range doc.Paragraphs {
+			context := p.Context
+			for _, qa := range p.QAs {
+				id := qa.Id
+				question := qa.Question
+				answers := qa.Answers
+				// plausibleAnswers := qa.PlausibleAnswers
+				isImpossible := qa.IsImposible
+
+				for _, a := range answers {
+					answerText := a.Text
+					answerStart := a.AnswerStart
+
+					newEx := NewExample(id, question, context, answerText, answerStart, title, isImpossible)
+					examples = append(examples, *newEx)
+				}
+			}
+		}
 	}
 
-	answer1 := []rune(p.Context)[269 : len([]rune("in the late 1990s"))+269]
-	fmt.Printf("answer1: '%v'\n", string(answer1))
+	return examples
 }

@@ -5,6 +5,8 @@ import (
 	"log"
 	"strings"
 
+	"github.com/sugarme/gotch"
+	"github.com/sugarme/gotch/tensor"
 	ts "github.com/sugarme/gotch/tensor"
 	"github.com/sugarme/tokenizer"
 	util "github.com/sugarme/tokenizer/util/slice"
@@ -19,90 +21,50 @@ var MultiSepTokensTokenizers []string = []string{
 
 // Example is a single training/test example for the Squad dataset, as loaded from disk.
 type Example struct {
-	QAsId            string   // example unique identification
-	QuestionText     string   // question string
-	ContextText      string   // context string
-	AnswerText       string   // answer string
-	Title            string   // Title of the example
-	Answers          []Answer // Default = nil. Holds answers as well as their start positions
-	IsImposible      bool     // Default = false. Set to true if the example has no possible answer.
-	StartPosition    int
-	EndPosition      int
-	DocTokens        []string // word tokens of the context.
-	CharToWordOffset []int    // offset of docToken
+	QAsId         string   // example unique identification
+	QuestionText  string   // question string
+	ContextText   string   // context string
+	AnswerText    string   // answer string
+	Title         string   // Title of the example
+	Answers       []Answer // Default = nil. Holds answers as well as their start positions
+	IsImposible   bool     // Default = false. Set to true if the example has no possible answer.
+	StartPosition int      // index of start rune ("character") of the answer
 }
 
 // NewExample creates a Example.
 //
-// startPositionChar is character position of the start of the answer.
-func NewExample(qasId string, question, context, answer string, startPositionChar int, title string, answers []Answer, isImpossible bool) *Example {
+// Params:
+// - qasId: unique Id of QAs in SQuAD dataset
+// - context: paragraph text
+// - answer: answer text
+// - startPositionChar:  first rune position of the answer string
+// - title: title of the document (article) in SQuAD dataset
+// - isImpossibleOpt: optional param set whether the example has no possible answer. Default=False
+func NewExample(qasId string, question, context, answer string, startPositionChar int, title string, isImpossibleOpt ...bool) *Example {
 
-	start, end := 0, 0
-
-	// Split on whitespace so that different tokens may be attributed to their original position.
-	docTokens, charToWordOffset := splitContext(context)
-
-	// Start and end positions only has a value during evaluation.
-	if startPositionChar != -1 && !isImpossible {
-		start = charToWordOffset[startPositionChar]
-		end = charToWordOffset[startPositionChar+len(answer)-1]
-		if (startPositionChar + len(answer)) > len(charToWordOffset) {
-			end = charToWordOffset[len(charToWordOffset)-1]
-		}
+	isImpossible := false
+	if len(isImpossibleOpt) > 0 {
+		isImpossible = isImpossibleOpt[0]
 	}
 
-	// TODO: implement
+	if isImpossible {
+		startPositionChar = -1
+	}
+
 	return &Example{
-		QAsId:            qasId,
-		QuestionText:     question,
-		ContextText:      context,
-		AnswerText:       answer,
-		Title:            title,
-		DocTokens:        docTokens,
-		CharToWordOffset: charToWordOffset,
-		StartPosition:    start,
-		EndPosition:      end,
+		QAsId:         qasId,
+		QuestionText:  question,
+		ContextText:   context,
+		AnswerText:    answer,
+		Title:         title,
+		StartPosition: startPositionChar,
 	}
 }
 
-// splitContext splits input text on 'whitespace'.
-// It returns tokens and their corresponding offsets.
-// TODO: need a unit test
-func splitContext(context string) (splits []string, offsets []int) {
-	var docTokens []string
-	var charToWordOffset []int
-	var currentWord []rune
-	var previousWhiteSpace bool = false
-
-	for _, char := range context {
-		charToWordOffset = append(charToWordOffset, len([]byte(string(char))))
-		if isWhiteSpace(char) {
-			previousWhiteSpace = true
-			if len(currentWord) > 0 {
-				docTokens = append(docTokens, string(currentWord))
-			}
-		} else {
-			if previousWhiteSpace {
-				currentWord = nil
-			}
-
-			currentWord = append(currentWord, char)
-			previousWhiteSpace = false
-		}
-	}
-
-	// Last word
-	if len(currentWord) > 0 {
-		docTokens = append(docTokens, string(currentWord))
-	}
-
-	return docTokens, charToWordOffset
-}
-
-// Features are SINGLE squad example features to be fed to the model.
+// Feature are SINGLE squad example feature to be fed to the model.
 //
-// Those features are model-specific and can be crafted using method `SquadExample.ConvertExampleToFeatures`.
-type Features struct {
+// This feature is model-specific and can be crafted using method `SquadExample.ConvertExampleToFeatures`.
+type Feature struct {
 	QAsId             string // example unique identification
 	InputIds          []int  // Indices of input sequence tokens in the vocabulary.
 	AttentionMask     []int  // Mask to avoid performing attention on padding token indices.
@@ -111,18 +73,18 @@ type Features struct {
 	PMask             []int  // Mask identifying tokens that can be answers versus tokens that cannot (1 not in the answer, 0 in the answer).
 	ExampleIndex      int    // Index of the example.
 	UniqueId          int    // The unique feature identifier.
-	ParagraphLen      int    // The length of the context.
 	TokenIsMaxContext []bool // A bool slice identifying which tokens have their maximum context in this feature.
 	// NOTE. If a token does not have their maximum context in this feature, it means that another feature has more
 	// information related to that token and should be prioritized over this feature for that token.
 	Tokens        []string // Slice of tokens corresponding to the input Ids.
-	StartPosition int      // Start of the answer token index.
-	EndPosition   int      // End of the answer token index.
+	StartPosition int      // Index of the first answer token. Value=0 if there's no answer
+	EndPosition   int      // Index of the last answer token. Value=0 if there's no answer
+	IsImposible   bool     // whether feature has no possible answer. False means feature has no possible answer.
 }
 
 // NewFeature creates new Squad Features.
-func NewFeature(inputIds []int, attentionMask []int, tokenTypeIds []int, clsIndex int, pMask []int, exampleIndex int, uniqueId int, paragraphLen int, tokenIsMaxContext []bool, tokens []string, startPosition, endPosition int, isImposible bool, qasId string) *Features {
-	return &Features{
+func NewFeature(inputIds []int, attentionMask []int, tokenTypeIds []int, clsIndex int, pMask []int, exampleIndex int, uniqueId int, tokenIsMaxContext []bool, tokens []string, startPosition, endPosition int, isImposible bool, qasId string) *Feature {
+	return &Feature{
 		InputIds:          inputIds,
 		AttentionMask:     attentionMask,
 		TokenTypeIds:      tokenTypeIds,
@@ -130,12 +92,12 @@ func NewFeature(inputIds []int, attentionMask []int, tokenTypeIds []int, clsInde
 		PMask:             pMask,
 		ExampleIndex:      exampleIndex,
 		UniqueId:          uniqueId,
-		ParagraphLen:      paragraphLen,
 		TokenIsMaxContext: tokenIsMaxContext,
 		Tokens:            tokens,
 		StartPosition:     startPosition,
 		EndPosition:       endPosition,
-		QAsId:             "",
+		QAsId:             qasId,
+		IsImposible:       isImposible,
 	}
 }
 
@@ -182,34 +144,32 @@ func isWhiteSpace(char rune) bool {
 }
 
 // ConvertExampleToFeatures converts a single example to features.
-func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, example Example, sepToken string, clsIndex int, isTraining bool) []Features {
+//
+// Params:
+// - tk: tokenizer to use
+// - sepToken: separator token
+// - clsIndex: index of the cls token
+// - answerStart: first word index of answer span in the context. Value=-1 if there is no answer.
+// - answerEnd: last word index of answer span in the context. Value=-1 if there is no answer.
+func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, sepToken string, clsIndex int, example Example, answerStart, answerEnd int) []Feature {
 
 	var (
-		features                   []Features
-		startPosition, endPosition int
+		features []Feature
 	)
-
-	if isTraining && !example.IsImposible {
-		// Get start and end position
-		startPosition = example.StartPosition
-		endPosition = example.EndPosition
-
-		// If the answer cannot be found in the text, skip this example.
-		actualText := strings.Join(example.DocTokens[startPosition:endPosition], " ")
-		cleanedAnswerText := strings.Join(whitespaceTokenize(example.AnswerText), " ")
-		if !strings.Contains(actualText, cleanedAnswerText) {
-			fmt.Printf("Could not find answer: '%s' vs. '%s'\n", actualText, cleanedAnswerText)
-			return []Features{}
-		}
-	}
 
 	// NOTE. tokenizer `TruncationParams` and `PaddingParams` should be configued up-stream
 	encoding, err := tk.EncodePair(example.QuestionText, example.ContextText, true)
 	if err != nil {
+		fmt.Println("EncodePair error:")
 		log.Fatal(err)
 	}
 
-	var spans []tokenizer.Encoding
+	var (
+		startA int = 0 // index of first answer token
+		endA   int = 0 // index of last answer token
+		spans  []tokenizer.Encoding
+	)
+
 	// 1. Encoding
 	selfSpan := encoding
 	selfSpan.Overflowing = []tokenizer.Encoding{}
@@ -218,7 +178,7 @@ func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, example Example, sepToken
 	spans = append(spans, encoding.Overflowing...)
 
 	for spanIndex, span := range spans {
-		// 2. pMask
+		// 3. pMask
 		var pMask []int
 		var sepIdx int
 		var maxContext []bool
@@ -241,7 +201,24 @@ func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, example Example, sepToken
 			maxContext = append(maxContext, isMaxCtx)
 		}
 
-		feature := NewFeature(span.Ids, span.AttentionMask, span.TypeIds, clsIndex, pMask, 0, 0, len(encoding.Tokens), maxContext, span.Tokens, span.Words[0], span.Words[len(span.Tokens)-1], example.IsImposible, example.QAsId)
+		// 4. Find token indices of answer in encoded tokens
+		for i, wordIdx := range span.Words { // i corresponds to token index
+			if startA == 0 && answerStart == wordIdx {
+				startA = i
+				break
+			}
+		}
+		for i, wordIdx := range span.Words { // i corresponds to token index
+			if endA == 0 && answerEnd == wordIdx {
+				endA = i
+				break
+			}
+		}
+
+		feature := NewFeature(span.Ids, span.AttentionMask, span.TypeIds, clsIndex, pMask, startA, endA, maxContext, span.Tokens, span.Words[0], span.Words[len(span.Tokens)-1], example.IsImposible, example.QAsId)
+
+		// Add exampleIndex
+		feature.ExampleIndex = spanIndex
 
 		features = append(features, *feature)
 	}
@@ -298,11 +275,53 @@ func isMaxContext(docSpans []tokenizer.Encoding, currentSpanIndex, position int)
 // - sepToken: sep token used in tokenizer (e.g. BERT tokenizer uses "[SEP]")
 // - padToken: pad token used in tokenizer (e.g. BERT tokenizer uses "[PAD]")
 // - clsIndex: index position of the cls token in encoded input after tokenizing (e.g. BERT tokenizer [CLS] index = 0)
-func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkName string, maxSeqLen, docStride, maxQueryLen int, sepToken, padToken string, clsIndex int, isTraining bool) [][]Features {
+// - isTraining: whether to config features for training (added Answer)
+// - returnTensorDataset: whether to stack Feature fields to a tensor.
+func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkName string, maxSeqLen, docStride, maxQueryLen int, sepToken, padToken string, clsIndex int, isTraining bool, returnTensorDataset bool) ([]Feature, ts.Tensor) {
 	// TODO: setup running in parallel
-	var featuresSet [][]Features
+	var features []Feature
 
 	for _, example := range examples {
+		// verify that context contains the answer. If not, skip this example for training.
+		if isTraining && !example.IsImposible {
+			// Get start and end position
+			startPosition := example.StartPosition
+			endPosition := startPosition + len([]rune(example.AnswerText))
+			// Infer answer text from startPosition rune index. If not match, skip it.
+			candidateAnswer := string([]rune(example.ContextText)[startPosition:endPosition])
+			if example.AnswerText != candidateAnswer {
+				fmt.Printf("Answer not found in context (infering from 'startPosition'):\nContext: %q\nAnswer: %q\n", example.ContextText, candidateAnswer)
+				fmt.Println("Skip this example for training...")
+				break
+			}
+		}
+
+		var startA, endA int
+		if example.IsImposible {
+			startA = -1
+			endA = -1
+		} else {
+			// TODO: should we need to clean whitespace before this process.
+			if isTraining && !example.IsImposible {
+				ctxWords := whitespaceTokenize(example.ContextText)
+				ansWords := whitespaceTokenize(example.AnswerText)
+				// first
+				for i, w := range ctxWords {
+					if w == ansWords[0] {
+						startA = i
+						break
+					}
+				}
+				// last
+				for i := len(ctxWords); i > 0; i-- {
+					if ctxWords[i] == ansWords[len(ansWords)-1] {
+						endA = i
+						break
+					}
+				}
+			}
+		}
+
 		// 1. Truncate question if needed
 		queryTruncParams := tokenizer.TruncationParams{
 			MaxLength: maxQueryLen,
@@ -311,11 +330,30 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 		}
 		queryTk := tk
 		queryTk.WithTruncation(&queryTruncParams)
+
+		queryPaddingStrategy := tokenizer.NewPaddingStrategy(tokenizer.WithFixed(0)) // fixed length
+		queryPadId, ok := tk.TokenToId(padToken)
+		if !ok {
+			log.Fatalf("'ConvertExampleToFeatures' method call error: cannot find pad token in the vocab.\n")
+		}
+
+		queryPaddingParams := tokenizer.PaddingParams{
+			Strategy:  *queryPaddingStrategy,
+			Direction: tokenizer.Right, // padding right
+			PadId:     queryPadId,
+			PadTypeId: 1,
+			PadToken:  padToken,
+		}
+		queryTk.WithPadding(&queryPaddingParams)
+
 		queryEncoding, err := queryTk.EncodeSingle(example.QuestionText, false)
 		if err != nil {
+			fmt.Printf("Error at EncodeSingle \n")
 			log.Fatal(err)
 		}
+
 		truncatedQuery := queryTk.Decode(queryEncoding.Ids, true)
+
 		example.QuestionText = truncatedQuery
 
 		// 2. Convert example
@@ -343,6 +381,7 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 		contextTk.WithTruncation(&truncParams)
 
 		// Setup padding Params
+
 		paddingStrategy := tokenizer.NewPaddingStrategy(tokenizer.WithFixed(maxSeqLen)) // fixed length
 		padId, ok := tk.TokenToId(padToken)
 		if !ok {
@@ -358,9 +397,124 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 		}
 		contextTk.WithPadding(&paddingParams)
 
-		features := ConvertExampleToFeatures(contextTk, example, sepToken, clsIndex, isTraining)
-		featuresSet = append(featuresSet, features)
+		exFeatures := ConvertExampleToFeatures(contextTk, sepToken, clsIndex, example, startA, endA)
+		features = append(features, exFeatures...)
 	}
 
-	return featuresSet
+	// Add feature uniqueId
+	uniqueId := 1000000000
+	for i := 0; i < len(features); i++ {
+		features[i].UniqueId = uniqueId
+		uniqueId++
+	}
+
+	if returnTensorDataset {
+		var (
+			allInputIds       [][]int64
+			allAttentionMasks [][]int64
+			allTokenTypeIds   [][]int64
+			allPMask          [][]int64
+			allStartPositions []int64
+			allEndPositions   []int64
+			allClsIndex       []int64
+			allIsImpossible   []bool
+
+			dataset ts.Tensor
+		)
+
+		for _, feat := range features {
+			allInputIds = append(allInputIds, toInt64(feat.InputIds))
+			allAttentionMasks = append(allAttentionMasks, toInt64(feat.AttentionMask))
+			allTokenTypeIds = append(allTokenTypeIds, toInt64(feat.TokenTypeIds))
+			allPMask = append(allPMask, toInt64(feat.PMask))
+			allStartPositions = append(allStartPositions, int64(feat.StartPosition))
+			allEndPositions = append(allEndPositions, int64(feat.EndPosition))
+			allClsIndex = append(allClsIndex, int64(feat.ClsIndex))
+			allIsImpossible = append(allIsImpossible, feat.IsImposible)
+		}
+
+		featureNum := int64(len(features))
+		shape := []int64{featureNum, int64(maxSeqLen)}
+		inputIds, err := ts.NewTensorFromData(allInputIds, shape)
+		if err != nil {
+			log.Fatalf("ConvertExamplesToFeatures Method - Convert InputIds error: '%v'\n", err)
+		}
+		inputIdsTs := inputIds.MustUnsqueeze(0, true)
+		attentionMasks, err := ts.NewTensorFromData(allAttentionMasks, shape)
+		if err != nil {
+			log.Fatalf("ConvertExamplesToFeatures Method - Convert AttentionMasks error: '%v'\n", err)
+		}
+		attentionMasksTs := attentionMasks.MustUnsqueeze(0, true)
+
+		tokenTypeIds, err := ts.NewTensorFromData(allTokenTypeIds, shape)
+		if err != nil {
+			log.Fatalf("ConvertExamplesToFeatures Method - Convert TokenTypeIds error: '%v'\n", err)
+		}
+		tokenTypeIdsTs := tokenTypeIds.MustUnsqueeze(0, true)
+
+		pMasks, err := ts.NewTensorFromData(allPMask, shape)
+		if err != nil {
+			log.Fatalf("ConvertExamplesToFeatures Method - Convert PMasks error: '%v'\n", err)
+		}
+		pMasksTs := pMasks.MustUnsqueeze(0, true)
+
+		clsIndexes, err := ts.NewTensorFromData(allClsIndex, []int64{featureNum})
+		if err != nil {
+			log.Fatalf("ConvertExamplesToFeatures Method - Convert ClsIndexes error: '%v'\n", err)
+		}
+		clsIndexesTs := clsIndexes.MustUnsqueeze(1, true).MustExpand([]int64{-1, int64(maxSeqLen)}, true, true).MustUnsqueeze(0, true)
+
+		var featTensors []ts.Tensor
+		if isTraining {
+
+			startPositions, err := ts.NewTensorFromData(allStartPositions, []int64{featureNum})
+			if err != nil {
+				log.Fatalf("ConvertExamplesToFeatures Method - Convert StartPositions error: '%v'\n", err)
+			}
+			startPositionsTs := startPositions.MustUnsqueeze(1, true).MustExpand([]int64{-1, int64(maxSeqLen)}, true, true).MustUnsqueeze(0, true)
+
+			endPositions, err := ts.NewTensorFromData(allEndPositions, []int64{featureNum})
+			if err != nil {
+				log.Fatalf("ConvertExamplesToFeatures Method - Convert EndPositions error: '%v'\n", err)
+			}
+			endPositionsTs := endPositions.MustUnsqueeze(1, true).MustExpand([]int64{-1, int64(maxSeqLen)}, true, true).MustUnsqueeze(0, true)
+			isImposibles := ts.MustOfSlice(allIsImpossible).MustView([]int64{featureNum}, true)
+			if err != nil {
+				log.Fatalf("ConvertExamplesToFeatures Method - Convert IsImposibles error: '%v'\n", err)
+			}
+			isImposiblesTs := isImposibles.MustUnsqueeze(1, true).MustExpand([]int64{-1, int64(maxSeqLen)}, true, true).MustUnsqueeze(0, true).MustTotype(gotch.Int64, true)
+
+			defer startPositionsTs.MustDrop()
+			defer endPositionsTs.MustDrop()
+			defer isImposiblesTs.MustDrop()
+
+			featTensors = []ts.Tensor{inputIdsTs, attentionMasksTs, tokenTypeIdsTs, pMasksTs, startPositionsTs, endPositionsTs, isImposiblesTs}
+		} else {
+			allFeatureIndexTs := ts.MustArange(tensor.IntScalar(int64(len(features))), gotch.Int64, gotch.CPU).MustUnsqueeze(1, true).MustExpand([]int64{-1, int64(maxSeqLen)}, true, true).MustUnsqueeze(0, true)
+
+			featTensors = []ts.Tensor{inputIdsTs, attentionMasksTs, tokenTypeIdsTs, allFeatureIndexTs, clsIndexesTs, pMasksTs}
+			defer allFeatureIndexTs.MustDrop()
+		}
+
+		dataset = ts.MustCat(featTensors, 0)
+
+		inputIdsTs.MustDrop()
+		attentionMasksTs.MustDrop()
+		tokenTypeIdsTs.MustDrop()
+		pMasksTs.MustDrop()
+		clsIndexesTs.MustDrop()
+
+		return features, dataset
+	}
+
+	return features, ts.None
+}
+
+func toInt64(data []int) []int64 {
+	var data64 []int64
+	for _, v := range data {
+		data64 = append(data64, int64(v))
+	}
+
+	return data64
 }

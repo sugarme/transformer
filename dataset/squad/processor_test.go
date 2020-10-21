@@ -1,8 +1,8 @@
 package squad_test
 
 import (
-	// "reflect"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/sugarme/tokenizer/pretrained"
@@ -13,19 +13,18 @@ func TestConvertExampleToFeatures(t *testing.T) {
 
 	tk := pretrained.BertLargeCasedWholeWordMaskingSquad()
 
-	question := "Where is remi living?"
-	context := "Remi has been living in Australia since he was born."
-	answer := "to update"
-	startPositionChar := 0
-	answers := []squad.Answer{}
-	title := "qa testing"
+	examples := squad.LoadV2("dev") // dataset shape: [4 20302 384]
+	// examples := squad.LoadV2("train") // dataset shape: [4 86821 384]
+	features, dataset := squad.ConvertExamplesToFeatures(examples, tk, "bert", 384, 128, 64, "[SEP]", "[PAD]", 0, false, true)
 
-	var example *squad.Example = squad.NewExample("1", question, context, answer, startPositionChar, title, answers, false)
+	fmt.Printf("num of features: %v\n", len(features))
+	fmt.Printf("dataset shape: %v\n", dataset.MustSize())
 
-	features := squad.ConvertExamplesToFeatures([]squad.Example{*example}, tk, "bert", 384, 128, 64, "[SEP]", "[PAD]", 0, false)
+	wantMaxSeqLen := int64(384)
+	gotMaxSeqLen := dataset.MustSize()[2]
 
-	fmt.Printf("features: %+v\n", features[0])
-
-	t.Errorf("Stops\n")
-
+	if !reflect.DeepEqual(wantMaxSeqLen, gotMaxSeqLen) {
+		t.Errorf("Want max sequence len: %v\n", wantMaxSeqLen)
+		t.Errorf("Got max sequence len: %v\n", gotMaxSeqLen)
+	}
 }
