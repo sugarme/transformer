@@ -108,22 +108,26 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 	var extendedAttentionMask ts.Tensor
 	switch maskTs.Dim() {
 	case 3:
-		extendedAttentionMask = maskTs.MustUnsqueeze(1, false) // TODO: check and delete maskTs if not using later
+		extendedAttentionMask = maskTs.MustUnsqueeze(1, true)
 	case 2:
 		if b.IsDecoder {
 			seqIds := ts.MustArange(ts.IntScalar(inputShape[1]), gotch.Float, device)
 			causalMaskTmp := seqIds.MustUnsqueeze(0, false).MustUnsqueeze(0, true).MustRepeat([]int64{inputShape[0], inputShape[1], 1}, true)
-			causalMask := causalMaskTmp.MustLe1(seqIds.MustUnsqueeze(0, true).MustUnsqueeze(1, true), true)
+			seqIdsTmp := seqIds.MustUnsqueeze(0, true).MustUnsqueeze(1, true)
+			causalMask := causalMaskTmp.MustLe1(seqIdsTmp, true)
+			seqIdsTmp.MustDrop()
 			extendedAttentionMask = causalMask.MustMatmul(mask.MustUnsqueeze(1, false).MustUnsqueeze(1, true), true)
 		} else {
-			extendedAttentionMask = maskTs.MustUnsqueeze(1, false).MustUnsqueeze(1, true)
+			extendedAttentionMask = maskTs.MustUnsqueeze(1, true).MustUnsqueeze(1, true)
 		}
-
 	default:
 		err = fmt.Errorf("Invalid attention mask dimension, must be 2 or 3, got %v\n", maskTs.Dim())
 	}
 
-	extendedAttnMask := extendedAttentionMask.MustOnesLike(false).MustSub(extendedAttentionMask, true).MustMul1(ts.FloatScalar(-10000.0), true)
+	mul1 := ts.FloatScalar(-10000.0)
+	extendedAttnMask := extendedAttentionMask.MustOnesLike(false).MustSub(extendedAttentionMask, true).MustMul1(mul1, true)
+	mul1.MustDrop()
+	extendedAttentionMask.MustDrop()
 
 	// NOTE. encoderExtendedAttentionMask is an optional tensor
 	var encoderExtendedAttentionMask ts.Tensor
@@ -157,6 +161,10 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 	hiddenState, allHiddenStates, allAttentions := b.Encoder.ForwardT(embeddingOutput, extendedAttnMask, encoderHiddenStates, encoderExtendedAttentionMask, train)
 
 	pooledOutput := b.Pooler.Forward(hiddenState)
+
+	extendedAttnMask.MustDrop()
+	embeddingOutput.MustDrop() // NOTE. free up this tensor causes panic after some cycles of forwarding. Why?
+	encoderExtendedAttentionMask.MustDrop()
 
 	return hiddenState, pooledOutput, allHiddenStates, allAttentions, nil
 }
@@ -639,16 +647,24 @@ func (qa *BertForQuestionAnswering) Load(modelNameOrPath string, config interfac
 // 	- `attentions`: slice of tensors of length numHiddenLayers with shape (batch size, sequenceLength, hiddenSize)
 func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
 
-	hiddenState, _, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+	hiddenState, pooledOutput, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+
+	pooledOutput.MustDrop() // don't use this. But need to clear memory in C land.
 	if err != nil {
 		// log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
 		return ts.None, ts.None, nil, nil, err
 	}
 
 	sequenceOutput := hiddenState.Apply(qa.qaOutputs)
-	logits := sequenceOutput.MustSplit(1, -1, false) // -1 : split along last size
+	logits := sequenceOutput.MustSplit(1, -1, true) // -1 : split along last size
 	startLogits := logits[0].MustSqueeze1(int64(-1), false)
 	endLogits := logits[1].MustSqueeze1(int64(-1), false)
+
+	for _, logitTs := range logits {
+		logitTs.MustDrop()
+	}
+
+	hiddenState.MustDrop()
 
 	return startLogits, endLogits, allHiddenStates, allAttentions, nil
 }

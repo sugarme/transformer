@@ -48,7 +48,7 @@ func NewBertEmbeddings(p nn.Path, config *BertConfig) *BertEmbeddings {
 	return &BertEmbeddings{&wordEmbeddings, &positionEmbeddings, &tokenTypeEmbeddings, &layerNorm, dropout}
 }
 
-// ForwardT implements BertEmbedding interface, passes throught the embedding layer
+// ForwardT implements BertEmbedding interface, passes through the embedding layer
 func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, err error) {
 
 	var (
@@ -81,7 +81,9 @@ func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmb
 	if positionIds.MustDefined() {
 		posIds = positionIds
 	} else {
-		tmp1 := ts.MustArange(ts.IntScalar(seqLength), gotch.Int64, inputEmbeddings.MustDevice())
+		seqLenTs := ts.IntScalar(seqLength)
+		tmp1 := ts.MustArange(seqLenTs, gotch.Int64, inputEmbeddings.MustDevice())
+		seqLenTs.MustDrop()
 		tmp2 := tmp1.MustUnsqueeze(0, true)
 		posIds = tmp2.MustExpand(inputShape, true, true)
 	}

@@ -103,17 +103,10 @@ func NewBertEncoder(p nn.Path, config *BertConfig) *BertEncoder {
 // ForwardT forwards pass through the model.
 func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 	var (
-		allHiddenStates, allAttentions []ts.Tensor = nil, nil
+		allHiddenStates []ts.Tensor
+		allAttentions   []ts.Tensor
+		hiddenState     ts.Tensor = hiddenStates
 	)
-
-	hiddenState := hiddenStates
-
-	if be.OutputHiddenStates {
-		allHiddenStates = make([]ts.Tensor, 0) // initialize it
-	}
-	if be.OutputAttentions {
-		allAttentions = make([]ts.Tensor, 0)
-	}
 
 	for _, layer := range be.Layers {
 		if allHiddenStates != nil {
@@ -127,9 +120,6 @@ func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoder
 		if allAttentions != nil {
 			allAttentions = append(allAttentions, attnWeightsTmp)
 		}
-
-		// TODO: should we need to delete `stateTmp` and `attnWeightsTmp` after all?
-
 	}
 
 	return hiddenState, allHiddenStates, allAttentions
@@ -158,6 +148,7 @@ func (bp *BertPooler) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
 
 	selectTs := hiddenStates.MustSelect(1, 0, false)
 	tmp := selectTs.Apply(bp.Lin)
+	selectTs.MustDrop()
 	retVal = tmp.MustTanh(true)
 	return retVal
 }

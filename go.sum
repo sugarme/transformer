@@ -17,6 +17,8 @@ github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJy
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/sugarme/gotch v0.1.7 h1:z16T9CNeY1gDmj4/1dPW6P6MEsW9KOGo4zbPD7znQP4=
 github.com/sugarme/gotch v0.1.7/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
+github.com/sugarme/gotch v0.1.8 h1:kfOIYFkKO9mTCam2DRenFql5ehILLJXcJLR0pebnYZU=
+github.com/sugarme/gotch v0.1.8/go.mod h1:w3zHhlZfnNS//C7YQd/89fOmgofd0RK8jf/GJ+cqkO4=
 github.com/sugarme/regexpset v0.0.0-20200813070853-0a3212d91786 h1:UjH1SaPFvC3V6yaMgB0xlh+8Ol8q1XML59GHS7hakbw=
 github.com/sugarme/regexpset v0.0.0-20200813070853-0a3212d91786/go.mod h1:2gwkXLWbDGUQWeL3RtpCmcY4mzCtU13kb9UsAg9xMaw=
 github.com/sugarme/regexpset v0.0.0-20200920021344-4d4ec8eaf93c h1:pwb4kNSHb4K89ymCaN+5lPH/MwnfSVg4rzGDh4d+iy4=

@@ -149,8 +149,8 @@ func isWhiteSpace(char rune) bool {
 // - tk: tokenizer to use
 // - sepToken: separator token
 // - clsIndex: index of the cls token
-// - answerStart: first word index of answer span in the context. Value=-1 if there is no answer.
-// - answerEnd: last word index of answer span in the context. Value=-1 if there is no answer.
+// - answerStart: start offset of answer on context sequence.
+// - answerEnd: end offset of answer on context sequence.
 func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, sepToken string, clsIndex int, example Example, answerStart, answerEnd int) []Feature {
 
 	var (
@@ -165,15 +165,14 @@ func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, sepToken string, clsIndex
 	}
 
 	var (
-		startA int = 0 // index of first answer token
-		endA   int = 0 // index of last answer token
-		spans  []tokenizer.Encoding
+		spans []tokenizer.Encoding
 	)
 
 	// 1. Encoding
 	selfSpan := encoding
 	selfSpan.Overflowing = []tokenizer.Encoding{}
 	spans = append(spans, *selfSpan)
+
 	// 2. Overflowing if any
 	spans = append(spans, encoding.Overflowing...)
 
@@ -202,24 +201,41 @@ func ConvertExampleToFeatures(tk *tokenizer.Tokenizer, sepToken string, clsIndex
 		}
 
 		// 4. Find token indices of answer in encoded tokens
-		for i, wordIdx := range span.Words { // i corresponds to token index
-			if startA == 0 && answerStart == wordIdx {
+		var startA int = -1                   // index of first answer token
+		var endA int = -1                     // index of last answer token
+		for i, offset := range span.Offsets { // i corresponds to token index
+			if span.TypeIds[i] != 1 { // question part
+				continue
+			}
+			if answerStart >= offset[0] && answerStart <= offset[1] {
 				startA = i
 				break
 			}
 		}
-		for i, wordIdx := range span.Words { // i corresponds to token index
-			if endA == 0 && answerEnd == wordIdx {
-				endA = i
-				break
+
+		// If reconstruct answer text does matched with the original, skip this example.
+		// NOTE. This would exclude any overflowings that don't contain the answer sequence.
+		if startA != -1 && string([]rune(example.AnswerText)[0]) == string([]rune(span.Tokens[startA])[0]) {
+			queryTk := tk
+			queryTk.WithPadding(nil)
+
+			aEncoding, err := queryTk.EncodeSingle(example.AnswerText, false)
+			if err != nil {
+				log.Fatal(err)
 			}
+			endA = len(aEncoding.Tokens) + startA
+			// fmt.Printf("origin: %q - decode: %q\n", example.AnswerText, tk.Decode(encoding.Ids[startA:endA], true))
+			// fmt.Printf("%q\n", tk.Decode(span.Ids, true))
+
+		} else {
+			fmt.Printf("##### Answer not matched. Skip this.#####\n")
+			continue
 		}
 
-		feature := NewFeature(span.Ids, span.AttentionMask, span.TypeIds, clsIndex, pMask, startA, endA, maxContext, span.Tokens, span.Words[0], span.Words[len(span.Tokens)-1], example.IsImposible, example.QAsId)
+		feature := NewFeature(span.Ids, span.AttentionMask, span.TypeIds, clsIndex, pMask, 0, 0, maxContext, span.Tokens, startA, endA, example.IsImposible, example.QAsId)
 
 		// Add exampleIndex
 		feature.ExampleIndex = spanIndex
-
 		features = append(features, *feature)
 	}
 
@@ -277,50 +293,43 @@ func isMaxContext(docSpans []tokenizer.Encoding, currentSpanIndex, position int)
 // - clsIndex: index position of the cls token in encoded input after tokenizing (e.g. BERT tokenizer [CLS] index = 0)
 // - isTraining: whether to config features for training (added Answer)
 // - returnTensorDataset: whether to stack Feature fields to a tensor.
+//
+// NOTE. returning tensor depends on input params:
+// - returnTensor=false: return tensor.None
+// - isTraining=false: return tensor of size [6, numOfFeatures, maxSeqLen]:
+//   + inputIds
+//   + attentionMasks
+//   + tokenTypeIds
+//   + featureIndexes
+//   + clsIndex (repeated values to make size=maxSeqLen)
+//   + pMasks
+// - isTraining=true: return tensor of size = [8, numOfFeatures, maxSeqLen]
+//   + inputIds
+//   + attentionMasks
+//   + tokenTypeIds
+//   + startPosition (repeated values to make size=maxSeqLen)
+//   + endPosition (repeated values to make size=maxSeqLen)
+//   + clsIndex (repeated values to make size=maxSeqLen)
+//   + pMasks
+//   + isImpossible (repeated values to make size=maxSeqLen)
 func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkName string, maxSeqLen, docStride, maxQueryLen int, sepToken, padToken string, clsIndex int, isTraining bool, returnTensorDataset bool) ([]Feature, ts.Tensor) {
 	// TODO: setup running in parallel
 	var features []Feature
 
 	for _, example := range examples {
 		// verify that context contains the answer. If not, skip this example for training.
-		if isTraining && !example.IsImposible {
-			// Get start and end position
-			startPosition := example.StartPosition
-			endPosition := startPosition + len([]rune(example.AnswerText))
-			// Infer answer text from startPosition rune index. If not match, skip it.
-			candidateAnswer := string([]rune(example.ContextText)[startPosition:endPosition])
-			if example.AnswerText != candidateAnswer {
-				fmt.Printf("Answer not found in context (infering from 'startPosition'):\nContext: %q\nAnswer: %q\n", example.ContextText, candidateAnswer)
-				fmt.Println("Skip this example for training...")
-				break
-			}
+		if isTraining && example.IsImposible {
+			continue
 		}
 
-		var startA, endA int
-		if example.IsImposible {
-			startA = -1
-			endA = -1
-		} else {
-			// TODO: should we need to clean whitespace before this process.
-			if isTraining && !example.IsImposible {
-				ctxWords := whitespaceTokenize(example.ContextText)
-				ansWords := whitespaceTokenize(example.AnswerText)
-				// first
-				for i, w := range ctxWords {
-					if w == ansWords[0] {
-						startA = i
-						break
-					}
-				}
-				// last
-				for i := len(ctxWords); i > 0; i-- {
-					if ctxWords[i] == ansWords[len(ansWords)-1] {
-						endA = i
-						break
-					}
-				}
-			}
+		// if context does not contain answer, skip it
+		if !strings.Contains(example.ContextText, example.AnswerText) {
+			continue
 		}
+
+		// Determine answer start/end (byte) offsets
+		oStart := len(string([]rune(example.ContextText))[0:example.StartPosition])
+		oEnd := oStart + len(example.AnswerText)
 
 		// 1. Truncate question if needed
 		queryTruncParams := tokenizer.TruncationParams{
@@ -397,7 +406,7 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 		}
 		contextTk.WithPadding(&paddingParams)
 
-		exFeatures := ConvertExampleToFeatures(contextTk, sepToken, clsIndex, example, startA, endA)
+		exFeatures := ConvertExampleToFeatures(contextTk, sepToken, clsIndex, example, oStart, oEnd)
 		features = append(features, exFeatures...)
 	}
 
@@ -488,7 +497,7 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 			defer endPositionsTs.MustDrop()
 			defer isImposiblesTs.MustDrop()
 
-			featTensors = []ts.Tensor{inputIdsTs, attentionMasksTs, tokenTypeIdsTs, pMasksTs, startPositionsTs, endPositionsTs, isImposiblesTs}
+			featTensors = []ts.Tensor{inputIdsTs, attentionMasksTs, tokenTypeIdsTs, startPositionsTs, endPositionsTs, clsIndexesTs, pMasksTs, isImposiblesTs}
 		} else {
 			allFeatureIndexTs := ts.MustArange(tensor.IntScalar(int64(len(features))), gotch.Int64, gotch.CPU).MustUnsqueeze(1, true).MustExpand([]int64{-1, int64(maxSeqLen)}, true, true).MustUnsqueeze(0, true)
 
