@@ -163,7 +163,7 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 	pooledOutput := b.Pooler.Forward(hiddenState)
 
 	extendedAttnMask.MustDrop()
-	embeddingOutput.MustDrop() // NOTE. free up this tensor causes panic after some cycles of forwarding. Why?
+	// embeddingOutput.MustDrop() // NOTE. free up this tensor causes panic after some cycles of forwarding. Why?
 	encoderExtendedAttentionMask.MustDrop()
 
 	return hiddenState, pooledOutput, allHiddenStates, allAttentions, nil
