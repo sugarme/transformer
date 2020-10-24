@@ -1,0 +1,125 @@
+[33ma91c7ea[m[33m ([m[1;36mHEAD -> [m[1;32mpipelines[m[33m)[m deleted unwanted file
+[33m26f0758[m WIP: debuging example/squad
+[33mc4c0fa0[m[33m ([m[1;31morigin/pipelines[m[33m)[m feat(dataset/squad)
+[33m06fce41[m WIP(squad/data)
+[33mce68f79[m squad/processor: ConvertExamplesToFeatures
+[33m7ce4d24[m added example/qa
+[33m594689d[m WIP(dataset/squad)
+[33md57ec29[m WIP(dataset/squad)
+[33m3797d11[m WIP(pipeline/qa): decode method
+[33md020c94[m WIP(pipeline/qa.go): predict method
+[33m9601f8e[m WIP(pipeline/qa)
+[33mc5e222f[m WIP(pipeline/qa)
+[33m5324fb2[m[33m ([m[1;31morigin/master[m[33m, [m[1;32mmaster[m[33m)[m updated CHANGELOG.md
+[33mcd0c870[m[33m ([m[1;33mtag: v0.1.2[m[33m)[m Merge pull request #3 from sugarme/roberta
+[33mef75732[m[33m ([m[1;31morigin/roberta[m[33m, [m[1;32mroberta[m[33m)[m feat(roberta/model): added Load methods; format comment document
+[33mf070dd3[m feat(roberta/model_test.go): roberta unit tests.
+[33ma1ade3b[m feat(roberta/model): completed
+[33m3127089[m feat(roberta/model_test.go): added TestRobertaMaskedLM
+[33mf3f2ee0[m feat(roberta/model): added RobertaLMHead, RobertaForMaskedLM
+[33m6cba3bf[m feat(roberta/embeddings): completed
+[33ma2cc15f[m WIP(roberta/embedding): added NewRobertaEmbeddings
+[33mc795f66[m WIP(roberta/embedding)
+[33m8a48fee[m[33m ([m[1;33mtag: v0.1.1[m[33m)[m chores(bert/model): format comment documentation; README.md: correct grammar
+[33ma271c29[m[33m ([m[1;33mtag: v0.1.0[m[33m)[m changes for v0.1.0
+[33mced9493[m Merge pull request #1 from sugarme/rewrite
+[33mfccfabc[m[33m ([m[1;31morigin/rewrite[m[33m, [m[1;32mrewrite[m[33m)[m change(bert): switch to pointer receiver and reorganize things in util
+[33m28c987b[m feat(bert/tokenizer)
+[33m0aac795[m feat(model, tokenizer) and clean-up
+[33m0fe6611[m feat(config)
+[33m3955836[m WIP(tokenization)
+[33ma6dc38c[m feat(config)
+[33mb1fc275[m feat(config): added config; WIP(bert): rewrite config
+[33m0ae5b51[m WIP(pipeline)
+[33mc18bf02[m feat(bert): completed unit tests
+[33mfda8d84[m feat(bert): BERT model and some unit tests and examples
+[33m6c23691[m WIP(bert/bert): BertForSequenceClassification
+[33m832df36[m feat(example/bert): BERT masked language model
+[33m05993c0[m WIP(example/bert): loaded varstore weights
+[33mce208c7[m WIP(example/bert)
+[33m529ab97[m WIP(bert/bert): added ForwardT method
+[33m6ad2f3c[m WIP(bert/encoder)
+[33mcf17724[m WIP(bert/attention): added
+[33m2bbba2b[m refactor to transformer
+[33m8a3df5e[m WIP: transformer/bert BertModel
+[33m5986771[m transformer/bert: attention
+[33m6bd1c39[m WIP: transformer/bert: attention; switch varstore to G.Node
+[33m2209dca[m WIP: nn/linear
+[33mca6ab3b[m WIP: transformer/bert: encoder
+[33mb959384[m WIP: util/nn
+[33mbe77fd4[m WIP: bert/embedding
+[33m19af567[m WIP: transformer/nn varstore draft
+[33m09ba053[m WIP: transformer/nn varstore
+[33m09582d8[m WIP: transformer/nn varstore
+[33m421eef5[m WIP: transformer/bert
+[33m9c6dde1[m WIP: transformer/bert
+[33mfc4ceb5[m WIP: transformer/bert
+[33m458218b[m clean up
+[33me1be9ca[m WIP: util/data
+[33m9ca25c5[m Fix(tokenizer/bpe): encode returns incorrect tokens
+[33m5543d1d[m WIP: fix bpe encode returns blank tokens
+[33m58483fd[m WIP: fix MergeAll error
+[33ma8a09d1[m fix(tokenizer/bpe): vocabR is empty and model save to merges.txt in wrong type
+[33mb0fe962[m fix(tokenizer/countPairs concurrency): set batch size and number of workers
+[33m88d43f2[m Roll back to  as  concurrency issue: TODO: fix this. Maybe by error handling
+[33m76968f1[m Fixed(tokenizer): counting token frequency
+[33m5ea3519[m updated example/tokenizer/bpe
+[33m8c267ee[m updated example/tokenizer
+[33med7217d[m feat(pretokenizer/bytelevel): unit test
+[33m188ee04[m WIP pretokenizer/bytelevel unit test
+[33m274363e[m feat(pretokenizer/bytelevel): completed. TODO: unit test
+[33m3c70c86[m WIP pretokenizer/bytelevel
+[33m233b364[m WIP: ByteLevel pretokenize
+[33m1fc2a80[m WIP: pretokenizer
+[33m772fc76[m feat(tokenizer/bpe): implement concorrency for reading input files and countPair
+[33m123e514[m Add more examples
+[33m7be8c29[m fixed model/bpe not fulfilment of model and trainer interfaces
+[33m1dbccd2[m bpe/example
+[33mcfc41c6[m feat(tokenizer/bpe): bpe tokenizer and some util functions
+[33ma04b44b[m feat(tokenizer/bpe): completed trainer unit test
+[33mf158808[m WIP bpe/trainer unit testing
+[33m8e0fe25[m WIP bpe/trainer unit testing
+[33m650549c[m WIP: bpe/trainer unit testing
+[33mb381a9c[m WIP bpe unit testing
+[33mfdcbdda[m WIP - bpe unit testing
+[33m3cbdd27[m WIP- bpe unit testing
+[33mc908835[m WIP: bpe unit test
+[33me6e886e[m WIP: bpe tunit test
+[33m11a6739[m bpe/trainer
+[33mecb3d03[m WIP: bpe/trainer
+[33m2f12dda[m WIP: bpe/trainer
+[33m0c34b42[m feat(tokenizer/model): bpe/model
+[33m5619a50[m WIP: bpe/model
+[33m25ba932[m WIP: bpe/model
+[33md6ffa51[m feat(tokenizer/model): bpe/cache
+[33m5762ba3[m feat(model/bpe): word.go
+[33m86434a3[m feat(utils/slice): added slice manipulation for string and int slices. Need unit testing
+[33m4ab2cf9[m WIP(tokenizer/models): word.go
+[33mbbb66f2[m feat(tokenizer): completed tokenizer. TODO: unit test and tokenizer model
+[33ma434b7a[m WIP(tokenizer): utils in tokenizer package
+[33m688ebe0[m WIP(tokenizer): added some methods
+[33md32376c[m WIP(tokenizer): added some methods
+[33me3afbae[m WIP(tokenizer):  method
+[33me7d368d[m WIP: tokenizer
+[33m6a8ba99[m WIP - tokenizer
+[33m9b8d78d[m feat(tokenizer/encoding): unit testing
+[33m970614f[m feat(tokenizer/encoding): completed encoding. TODO: unit testing
+[33m43323d7[m feat(normalizer): completed APIs with some unit tests
+[33mda1fc17[m WIP - BERTNormalizer
+[33m0efe7cf[m WIP normalizer package - wiring up
+[33md66a686[m WIP(normalized)
+[33m3bde646[m feat(normalizer/normalized): NFC, NFD, NFKC, NDKD and TODO's funcs
+[33me41bae1[m feat(normalizer/normalized) Filter method
+[33m5c75ce8[m WIP - normalized filter
+[33m5cb3e87[m feat(normalizer/normalized): added NFD() func
+[33m8691eb5[m WIP - normalize/transform
+[33m8ea1d36[m feat(normalized/transform): transform method. Not tested yet
+[33m58c1b5e[m WIP - normalized continue...
+[33m4649620[m (WIP) normalized
+[33m643af65[m WIP - normalizer (continue...)
+[33m4b36880[m WIP: normalizer
+[33m3634e85[m feat(Tokenize): completed wordpiece tokenizer
+[33m3627448[m WIP(wordpiece tokenizer)
+[33m2f9fa01[m feat(tokenize): completed tokenize package
+[33mcdb1269[m WIP(vocab and tokenize): added vocab package and tokenize (WIP)
+[33m833cf7a[m Initial commit
