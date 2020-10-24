@@ -111,7 +111,9 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 		extendedAttentionMask = maskTs.MustUnsqueeze(1, true)
 	case 2:
 		if b.IsDecoder {
-			seqIds := ts.MustArange(ts.IntScalar(inputShape[1]), gotch.Float, device)
+			rangeSc := ts.IntScalar(inputShape[1])
+			seqIds := ts.MustArange(rangeSc, gotch.Float, device)
+			rangeSc.MustDrop()
 			causalMaskTmp := seqIds.MustUnsqueeze(0, false).MustUnsqueeze(0, true).MustRepeat([]int64{inputShape[0], inputShape[1], 1}, true)
 			seqIdsTmp := seqIds.MustUnsqueeze(0, true).MustUnsqueeze(1, true)
 			causalMask := causalMaskTmp.MustLe1(seqIdsTmp, true)
@@ -153,17 +155,20 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 		encoderExtendedAttentionMask = ts.None
 	}
 
+	// Embedding
 	embeddingOutput, err := b.Embeddings.ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds, train)
 	if err != nil {
 		return
 	}
 
+	// Encoding
 	hiddenState, allHiddenStates, allAttentions := b.Encoder.ForwardT(embeddingOutput, extendedAttnMask, encoderHiddenStates, encoderExtendedAttentionMask, train)
 
+	// Pooling
 	pooledOutput := b.Pooler.Forward(hiddenState)
 
 	extendedAttnMask.MustDrop()
-	// embeddingOutput.MustDrop() // NOTE. free up this tensor causes panic after some cycles of forwarding. Why?
+	embeddingOutput.MustDrop() // NOTE. free up this tensor may causes panic?
 	encoderExtendedAttentionMask.MustDrop()
 
 	return hiddenState, pooledOutput, allHiddenStates, allAttentions, nil
@@ -651,20 +656,19 @@ func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, posit
 
 	pooledOutput.MustDrop() // don't use this. But need to clear memory in C land.
 	if err != nil {
-		// log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
+		log.Printf("Call 'BertForQuestionAnswering ForwardT' method error: %v\n", err)
 		return ts.None, ts.None, nil, nil, err
 	}
 
 	sequenceOutput := hiddenState.Apply(qa.qaOutputs)
+	hiddenState.MustDrop()
+
 	logits := sequenceOutput.MustSplit(1, -1, true) // -1 : split along last size
 	startLogits := logits[0].MustSqueeze1(int64(-1), false)
 	endLogits := logits[1].MustSqueeze1(int64(-1), false)
-
-	for _, logitTs := range logits {
-		logitTs.MustDrop()
+	for _, logit := range logits {
+		logit.MustDrop()
 	}
-
-	hiddenState.MustDrop()
 
 	return startLogits, endLogits, allHiddenStates, allAttentions, nil
 }

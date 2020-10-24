@@ -74,42 +74,61 @@ func (bsa *BertSelfAttention) flatten(x ts.Tensor, bs, dimPerHead int64) (retVal
 // for `None` value, `ts.None` can be used.
 func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt ts.Tensor) {
 
-	key := bsa.Key.Forward(hiddenStates)
-	value := bsa.Value.Forward(hiddenStates)
+	var (
+		key   ts.Tensor
+		value ts.Tensor
+	)
 
+	// NOTE. use `if...else` instead of exclusive `if` block to avoid
+	// free up C land memory before re-assigning
 	if encoderHiddenStates.MustDefined() {
 		key = bsa.Key.Forward(encoderHiddenStates)
 		value = bsa.Value.Forward(encoderHiddenStates)
+	} else {
+		key = bsa.Key.Forward(hiddenStates)
+		value = bsa.Value.Forward(hiddenStates)
 	}
 
 	bs := hiddenStates.MustSize()[0]
 
 	hiddenStatesQ := hiddenStates.Apply(bsa.Query)
 	query := bsa.splitHeads(hiddenStatesQ, bs, bsa.AttentionHeadSize)
-
 	hiddenStatesQ.MustDrop()
+
+	// Key layer
 	keyLayer := bsa.splitHeads(key, bs, bsa.AttentionHeadSize)
 	key.MustDrop()
+
+	// Value layer
 	valueLayer := bsa.splitHeads(value, bs, bsa.AttentionHeadSize)
 	value.MustDrop()
 
+	// Query layer
 	size := math.Sqrt(float64(bsa.AttentionHeadSize))
-	queryLayer := query.MustDiv1(ts.FloatScalar(size), true)
+	sizeSc := ts.FloatScalar(size)
+	queryLayer := query.MustDiv1(sizeSc, true)
+	sizeSc.MustDrop()
 
 	// Calculate score
-	var scores ts.Tensor
+	var (
+		scores    ts.Tensor
+		keyLayerT ts.Tensor
+	)
 	if mask.MustDefined() {
-		keyLayerT := keyLayer.MustTranspose(-1, -2, true)
+		keyLayerT = keyLayer.MustTranspose(-1, -2, true)
 		keyLayerT.MustAdd_(mask)
 		scores = queryLayer.MustMatmul(keyLayerT, true)
 	} else {
-		keyLayerT := keyLayer.MustTranspose(-1, -2, true)
+		keyLayerT = keyLayer.MustTranspose(-1, -2, true)
 		scores = queryLayer.MustMatmul(keyLayerT, true)
 	}
+	keyLayerT.MustDrop()
 
-	weights := scores.MustSoftmax(-1, gotch.Float, true).ApplyT(bsa.Dropout, train)
-
+	scoresSoftMax := scores.MustSoftmax(-1, gotch.Float, true)
+	weights := scoresSoftMax.ApplyT(bsa.Dropout, train)
+	scoresSoftMax.MustDrop()
 	weightsMul := weights.MustMatmul(valueLayer, false)
+	valueLayer.MustDrop()
 
 	context := bsa.flatten(weightsMul, bs, bsa.AttentionHeadSize)
 	weightsMul.MustDrop()
@@ -179,9 +198,11 @@ func NewBertAttention(p nn.Path, config *BertConfig) *BertAttention {
 func (ba *BertAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, RetValOpt ts.Tensor) {
 
 	selfOutput, attentionWeights := ba.Bsa.ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask, train)
-	selfOutput = ba.Output.ForwardT(selfOutput, hiddenStates, train)
+	attentionOutput := ba.Output.ForwardT(selfOutput, hiddenStates, train)
 
-	return selfOutput, attentionWeights
+	selfOutput.MustDrop()
+
+	return attentionOutput, attentionWeights
 }
 
 // BertIntermedate:

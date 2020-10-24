@@ -37,9 +37,9 @@ func runTrain(dataset ts.Tensor) {
 		log.Fatalf("Load model weight error: \n%v", err)
 	}
 
-	var batchSize int64 = 2
+	var batchSize int64 = 4
 	var seqLen int64 = int64(384)
-	batches := 5
+	batches := 10
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
@@ -68,7 +68,6 @@ func runTrain(dataset ts.Tensor) {
 			typeIds.MustDrop()
 
 			runtime.GC()
-
 		})
 
 		// next batch
