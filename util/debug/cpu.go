@@ -1,4 +1,4 @@
-package main
+package debug
 
 // helper to debug memory blow-up
 

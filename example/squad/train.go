@@ -1,11 +1,12 @@
 package main
 
 import (
-	"fmt"
+	// "fmt"
 	"log"
 	"runtime"
 
 	"github.com/sugarme/transformer/bert"
+	"github.com/sugarme/transformer/util/debug"
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
@@ -13,13 +14,6 @@ import (
 )
 
 func runTrain(dataset ts.Tensor) {
-	// Setup debug CPU
-	var si *SI
-	si = CPUInfo()
-	fmt.Printf("Total RAM (MB):\t %8.2f\n", float64(si.TotalRam)/1024)
-	fmt.Printf("Used RAM (MB):\t %8.2f\n", float64(si.TotalRam-si.FreeRam)/1024)
-	startRAM := si.TotalRam - si.FreeRam
-
 	// Config
 	config, err := bert.ConfigFromFile("../../data/bert/config-qa.json")
 	if err != nil {
@@ -39,12 +33,11 @@ func runTrain(dataset ts.Tensor) {
 
 	var batchSize int64 = 4
 	var seqLen int64 = int64(384)
-	batches := 10
+	batches := 20
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
 	for n := 0; n < batches; n++ {
-
 		ts.NoGrad(func() {
 			inputIdsIdx := []ts.TensorIndexer{ts.NewSelect(0), ts.NewNarrow(currIdx, nextIdx)}
 			inputIds := dataset.Idx(inputIdsIdx).MustTo(device, true).MustView([]int64{batchSize, seqLen}, true)
@@ -74,9 +67,8 @@ func runTrain(dataset ts.Tensor) {
 		currIdx = nextIdx
 		nextIdx += batchSize
 
-		si = CPUInfo()
-		fmt.Printf("Batch %v\t Used: [%8.2f MiB]\n", n, (float64(si.TotalRam-si.FreeRam)-float64(startRAM))/1024)
-
+		debug.UsedRAM()
+		// debug.UsedGPU()
 		// fmt.Printf("Batch %v completed.\n", n)
 	}
 }
