@@ -1,7 +1,7 @@
 package main
 
 import (
-	// "fmt"
+	"fmt"
 	"log"
 	"runtime"
 
@@ -14,6 +14,9 @@ import (
 )
 
 func runTrain(dataset ts.Tensor) {
+
+	// runtime.GOMAXPROCS(4)
+
 	// Config
 	config, err := bert.ConfigFromFile("../../data/bert/config-qa.json")
 	if err != nil {
@@ -25,11 +28,15 @@ func runTrain(dataset ts.Tensor) {
 	// device := gotch.NewCuda().CudaIfAvailable()
 	vs := nn.NewVarStore(device)
 
+	debug.UsedRAM()
 	model := bert.NewBertForQuestionAnswering(vs.Root(), config)
 	err = vs.Load("../../data/bert/bert-qa.ot")
 	if err != nil {
 		log.Fatalf("Load model weight error: \n%v", err)
 	}
+	debug.UsedRAM()
+
+	fmt.Printf("%+v\n", model)
 
 	var batchSize int64 = 4
 	var seqLen int64 = int64(384)
@@ -40,12 +47,16 @@ func runTrain(dataset ts.Tensor) {
 	for n := 0; n < batches; n++ {
 		ts.NoGrad(func() {
 			inputIdsIdx := []ts.TensorIndexer{ts.NewSelect(0), ts.NewNarrow(currIdx, nextIdx)}
-			inputIds := dataset.Idx(inputIdsIdx).MustTo(device, true).MustView([]int64{batchSize, seqLen}, true)
+			inputIds := dataset.Idx(inputIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
+			// inputIds := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
 
 			typeIdsIdx := []ts.TensorIndexer{ts.NewSelect(1), ts.NewNarrow(currIdx, nextIdx)}
-			typeIds := dataset.Idx(typeIdsIdx).MustTo(device, true).MustView([]int64{batchSize, seqLen}, true)
+			typeIds := dataset.Idx(typeIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
+			// typeIds := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
 
-			startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.None, typeIds, ts.None, ts.None, true)
+			fmt.Print("Before: ")
+			debug.UsedRAM()
+			startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.None, typeIds, ts.None, ts.None, false)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -61,13 +72,14 @@ func runTrain(dataset ts.Tensor) {
 			typeIds.MustDrop()
 
 			runtime.GC()
+			fmt.Print("After: ")
+			debug.UsedRAM()
 		})
 
 		// next batch
 		currIdx = nextIdx
 		nextIdx += batchSize
 
-		debug.UsedRAM()
 		// debug.UsedGPU()
 		// fmt.Printf("Batch %v completed.\n", n)
 	}

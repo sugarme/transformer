@@ -115,8 +115,8 @@ func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, 
 		keyLayerT ts.Tensor
 	)
 	if mask.MustDefined() {
-		keyLayerT = keyLayer.MustTranspose(-1, -2, true)
-		keyLayerT.MustAdd_(mask)
+		keyLayerTTmp := keyLayer.MustTranspose(-1, -2, true)
+		keyLayerT = keyLayerTTmp.MustAdd(mask, true)
 		scores = queryLayer.MustMatmul(keyLayerT, true)
 	} else {
 		keyLayerT = keyLayer.MustTranspose(-1, -2, true)

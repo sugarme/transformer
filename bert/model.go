@@ -118,7 +118,10 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 			seqIdsTmp := seqIds.MustUnsqueeze(0, true).MustUnsqueeze(1, true)
 			causalMask := causalMaskTmp.MustLe1(seqIdsTmp, true)
 			seqIdsTmp.MustDrop()
-			extendedAttentionMask = causalMask.MustMatmul(mask.MustUnsqueeze(1, false).MustUnsqueeze(1, true), true)
+			maskUS1 := mask.MustUnsqueeze(1, false)
+			maskUS2 := maskUS1.MustUnsqueeze(1, true)
+			extendedAttentionMask = causalMask.MustMatmul(maskUS2, true)
+			maskUS2.MustDrop()
 		} else {
 			extendedAttentionMask = maskTs.MustUnsqueeze(1, true).MustUnsqueeze(1, true)
 		}
