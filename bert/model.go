@@ -76,8 +76,9 @@ func NewBertModel(p nn.Path, config *BertConfig) *BertModel {
 func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
 
 	var (
-		inputShape []int64
-		device     gotch.Device
+		inputShape  []int64
+		device      gotch.Device
+		dropTensors []ts.Tensor = make([]ts.Tensor, 0)
 	)
 
 	if inputIds.MustDefined() {
@@ -103,6 +104,7 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 		maskTs = mask
 	} else {
 		maskTs = ts.MustOnes(inputShape, gotch.Int64, device)
+		dropTensors = append(dropTensors, maskTs)
 	}
 
 	var extendedAttentionMask ts.Tensor
@@ -173,6 +175,10 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 	extendedAttnMask.MustDrop()
 	embeddingOutput.MustDrop() // NOTE. free up this tensor may causes panic?
 	encoderExtendedAttentionMask.MustDrop()
+
+	for i := 0; i < len(dropTensors); i++ {
+		// dropTensors[i].MustDrop()
+	}
 
 	return hiddenState, pooledOutput, allHiddenStates, allAttentions, nil
 }
@@ -659,8 +665,7 @@ func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, posit
 
 	pooledOutput.MustDrop() // don't use this. But need to clear memory in C land.
 	if err != nil {
-		log.Printf("Call 'BertForQuestionAnswering ForwardT' method error: %v\n", err)
-		return ts.None, ts.None, nil, nil, err
+		log.Fatalf("Call 'BertForQuestionAnswering ForwardT' method error: %v\n", err)
 	}
 
 	sequenceOutput := hiddenState.Apply(qa.qaOutputs)

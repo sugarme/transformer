@@ -14,7 +14,6 @@ import (
 )
 
 func runTrain(dataset ts.Tensor) {
-
 	// runtime.GOMAXPROCS(4)
 
 	// Config
@@ -28,17 +27,16 @@ func runTrain(dataset ts.Tensor) {
 	// device := gotch.NewCuda().CudaIfAvailable()
 	vs := nn.NewVarStore(device)
 
-	debug.UsedRAM()
+	_ = debug.UsedCPUMem()
 	model := bert.NewBertForQuestionAnswering(vs.Root(), config)
 	err = vs.Load("../../data/bert/bert-qa.ot")
 	if err != nil {
 		log.Fatalf("Load model weight error: \n%v", err)
 	}
-	debug.UsedRAM()
 
-	fmt.Printf("%+v\n", model)
+	debug.UsedCPUMem()
 
-	var batchSize int64 = 4
+	var batchSize int64 = 12
 	var seqLen int64 = int64(384)
 	batches := 20
 
@@ -54,8 +52,6 @@ func runTrain(dataset ts.Tensor) {
 			typeIds := dataset.Idx(typeIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
 			// typeIds := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
 
-			fmt.Print("Before: ")
-			debug.UsedRAM()
 			startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.None, typeIds, ts.None, ts.None, false)
 			if err != nil {
 				log.Fatal(err)
@@ -72,8 +68,7 @@ func runTrain(dataset ts.Tensor) {
 			typeIds.MustDrop()
 
 			runtime.GC()
-			fmt.Print("After: ")
-			debug.UsedRAM()
+			fmt.Printf("Batch %3.0d\t - Used RAM: %8.0f(MiB) - Used GPU: %8.0f\n", n, debug.UsedCPUMem(), debug.UsedGPUMem())
 		})
 
 		// next batch
