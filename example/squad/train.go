@@ -27,6 +27,12 @@ func runTrain(dataset ts.Tensor) {
 	// device := gotch.NewCuda().CudaIfAvailable()
 	vs := nn.NewVarStore(device)
 
+	lr := 1e-4
+	opt, err := nn.DefaultAdamConfig().Build(vs, lr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	_ = debug.UsedCPUMem()
 	model := bert.NewBertForQuestionAnswering(vs.Root(), config)
 	err = vs.Load("../../data/bert/bert-qa.ot")
@@ -36,40 +42,58 @@ func runTrain(dataset ts.Tensor) {
 
 	debug.UsedCPUMem()
 
-	var batchSize int64 = 12
+	var batchSize int64 = 2
 	var seqLen int64 = int64(384)
-	batches := 20
+	batches := 3
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
 	for n := 0; n < batches; n++ {
-		ts.NoGrad(func() {
-			inputIdsIdx := []ts.TensorIndexer{ts.NewSelect(0), ts.NewNarrow(currIdx, nextIdx)}
-			inputIds := dataset.Idx(inputIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
-			// inputIds := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
+		// ts.NoGrad(func() {
+		inputIdsIdx := []ts.TensorIndexer{ts.NewSelect(0), ts.NewNarrow(currIdx, nextIdx)}
+		inputIds := dataset.Idx(inputIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
+		// inputIds := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
 
-			typeIdsIdx := []ts.TensorIndexer{ts.NewSelect(1), ts.NewNarrow(currIdx, nextIdx)}
-			typeIds := dataset.Idx(typeIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
-			// typeIds := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
+		typeIdsIdx := []ts.TensorIndexer{ts.NewSelect(1), ts.NewNarrow(currIdx, nextIdx)}
+		typeIds := dataset.Idx(typeIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
+		// typeIds := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
 
-			startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.None, typeIds, ts.None, ts.None, false)
-			if err != nil {
-				log.Fatal(err)
-			}
-			startLogits.MustDrop()
-			endLogits.MustDrop()
+		startIdx := []ts.TensorIndexer{ts.NewSelect(4), ts.NewNarrow(currIdx, nextIdx), ts.NewNarrow(0, 1)}
+		startA := dataset.Idx(startIdx).MustView([]int64{batchSize}, true).MustTo(device, true)
+		// startA := ts.MustOnes([]int64{batchSize}, gotch.Int64, device)
 
-			for i := 0; i < len(allAttentionMasks); i++ {
-				allAttentionMasks[i].MustDrop()
-				allAttentions[i].MustDrop()
-			}
+		ts.MustGradSetEnabled(true)
+		startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.None, typeIds, ts.None, ts.None, true)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-			inputIds.MustDrop()
-			typeIds.MustDrop()
+		fmt.Printf("startLogits shape: %v\n", startLogits.MustSize())
+		fmt.Printf("startA shape: %v\n", startA.MustSize())
 
-			runtime.GC()
-			fmt.Printf("Batch %3.0d\t - Used RAM: %8.0f(MiB) - Used GPU: %8.0f\n", n, debug.UsedCPUMem(), debug.UsedGPUMem())
-		})
+		startLoss := startLogits.CrossEntropyForLogits(startA)
+		opt.BackwardStep(startLoss)
+
+		ts.MustGradSetEnabled(false)
+
+		fmt.Printf("Loss: %8.3f\n", startLoss.Float64Values()[0])
+
+		startLoss.MustDrop()
+
+		startLogits.MustDrop()
+		endLogits.MustDrop()
+
+		for i := 0; i < len(allAttentionMasks); i++ {
+			allAttentionMasks[i].MustDrop()
+			allAttentions[i].MustDrop()
+		}
+
+		inputIds.MustDrop()
+		typeIds.MustDrop()
+
+		runtime.GC()
+		fmt.Printf("Batch %3.0d\t - Used RAM: %8.0f(MiB) - Used GPU: %8.0f\n", n, debug.UsedCPUMem(), debug.UsedGPUMem())
+		// })
 
 		// next batch
 		currIdx = nextIdx
