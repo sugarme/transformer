@@ -157,7 +157,7 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 			return
 		}
 	} else {
-		encoderExtendedAttentionMask = ts.None
+		encoderExtendedAttentionMask = ts.NewTensor()
 	}
 
 	// Embedding
@@ -399,7 +399,7 @@ func NewBertForSequenceClassification(p nn.Path, config *BertConfig) *BertForSeq
 // 	- `hiddenStates`: slice of tensors of length numHiddenLayers with shape (batch size, sequenceLength, hiddenSize)
 // 	- `attentions`: slice of tensors of length numHiddenLayers with shape (batch size, sequenceLength, hiddenSize)
 func (bsc *BertForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
-	_, pooledOutput, allHiddenStates, allAttentions, err := bsc.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+	_, pooledOutput, allHiddenStates, allAttentions, err := bsc.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.NewTensor(), ts.NewTensor(), train)
 
 	if err != nil {
 		log.Fatalf("call bert.ForwardT error: %v", err)
@@ -470,25 +470,25 @@ func (mc *BertForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, position
 	numChoices := inputIdsSize[1]
 	inputIdsView := inputIds.MustView([]int64{-1, inputIdsSize[len(inputIdsSize)-1]}, false)
 
-	maskView := ts.None
+	maskView := ts.NewTensor()
 	if mask.MustDefined() {
 		maskSize := mask.MustSize()
 		maskView = mask.MustView([]int64{-1, maskSize[len(maskSize)-1]}, false)
 	}
 
-	tokenTypeIdsView := ts.None
+	tokenTypeIdsView := ts.NewTensor()
 	if tokenTypeIds.MustDefined() {
 		tokenTypeIdsSize := tokenTypeIds.MustSize()
 		tokenTypeIdsView = tokenTypeIds.MustView([]int64{-1, tokenTypeIdsSize[len(tokenTypeIdsSize)-1]}, false)
 	}
 
-	positionIdsView := ts.None
+	positionIdsView := ts.NewTensor()
 	if positionIds.MustDefined() {
 		positionIdsSize := positionIds.MustSize()
 		positionIdsView = positionIds.MustView([]int64{-1, positionIdsSize[len(positionIdsSize)-1]}, false)
 	}
 
-	_, pooledOutput, allHiddenStates, allAttentions, err := mc.bert.ForwardT(inputIdsView, maskView, tokenTypeIdsView, positionIdsView, ts.None, ts.None, ts.None, train)
+	_, pooledOutput, allHiddenStates, allAttentions, err := mc.bert.ForwardT(inputIdsView, maskView, tokenTypeIdsView, positionIdsView, ts.NewTensor(), ts.NewTensor(), ts.NewTensor(), train)
 	if err != nil {
 		log.Fatalf("Call 'BertForMultipleChoice ForwordT' method error: %v\n", err)
 	}
@@ -559,7 +559,7 @@ func NewBertForTokenClassification(p nn.Path, config *BertConfig) *BertForTokenC
 // 	- `attentions`: slice of tensors of length numHiddenLayers with shape (batch size, sequenceLength, hiddenSize)
 func (tc *BertForTokenClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 
-	hiddenState, _, allHiddenStates, allAttentions, err := tc.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+	hiddenState, _, allHiddenStates, allAttentions, err := tc.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.NewTensor(), ts.NewTensor(), train)
 	if err != nil {
 		log.Fatalf("Call 'BertForTokenClassification ForwardT' method error: %v\n", err)
 	}
@@ -661,7 +661,7 @@ func (qa *BertForQuestionAnswering) Load(modelNameOrPath string, config interfac
 // 	- `attentions`: slice of tensors of length numHiddenLayers with shape (batch size, sequenceLength, hiddenSize)
 func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
 
-	hiddenState, pooledOutput, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
+	hiddenState, pooledOutput, allHiddenStates, allAttentions, err := qa.bert.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.NewTensor(), ts.NewTensor(), train)
 
 	pooledOutput.MustDrop() // don't use this. But need to clear memory in C land.
 	if err != nil {

@@ -135,7 +135,7 @@ func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, 
 
 	if !bsa.OutputAttentions {
 		weights.MustDrop()
-		return context, ts.None
+		return context, ts.NewTensor()
 	} else {
 		return context, weights
 	}

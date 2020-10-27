@@ -23,8 +23,8 @@ func runTrain(dataset ts.Tensor) {
 	}
 
 	// Model
-	device := gotch.CPU
-	// device := gotch.NewCuda().CudaIfAvailable()
+	// device := gotch.CPU
+	device := gotch.NewCuda().CudaIfAvailable()
 	vs := nn.NewVarStore(device)
 
 	lr := 1e-4
@@ -42,9 +42,9 @@ func runTrain(dataset ts.Tensor) {
 
 	debug.UsedCPUMem()
 
-	var batchSize int64 = 2
+	var batchSize int64 = 4
 	var seqLen int64 = int64(384)
-	batches := 3
+	batches := 1000
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
@@ -58,30 +58,28 @@ func runTrain(dataset ts.Tensor) {
 		typeIds := dataset.Idx(typeIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
 		// typeIds := ts.MustZeros([]int64{batchSize, seqLen}, gotch.Int64, device)
 
-		startIdx := []ts.TensorIndexer{ts.NewSelect(4), ts.NewNarrow(currIdx, nextIdx), ts.NewNarrow(0, 1)}
+		startIdx := []ts.TensorIndexer{ts.NewSelect(3), ts.NewNarrow(currIdx, nextIdx), ts.NewNarrow(0, 1)}
 		startA := dataset.Idx(startIdx).MustView([]int64{batchSize}, true).MustTo(device, true)
 		// startA := ts.MustOnes([]int64{batchSize}, gotch.Int64, device)
 
 		ts.MustGradSetEnabled(true)
-		startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.None, typeIds, ts.None, ts.None, true)
+		startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.NewTensor(), typeIds, ts.NewTensor(), ts.NewTensor(), true)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		fmt.Printf("startLogits shape: %v\n", startLogits.MustSize())
-		fmt.Printf("startA shape: %v\n", startA.MustSize())
+		endLogits.MustDrop()
 
 		startLoss := startLogits.CrossEntropyForLogits(startA)
 		opt.BackwardStep(startLoss)
 
-		ts.MustGradSetEnabled(false)
+		// ts.MustGradSetEnabled(false)
 
-		fmt.Printf("Loss: %8.3f\n", startLoss.Float64Values()[0])
+		loss := startLoss.Float64Values()[0]
 
 		startLoss.MustDrop()
 
 		startLogits.MustDrop()
-		endLogits.MustDrop()
 
 		for i := 0; i < len(allAttentionMasks); i++ {
 			allAttentionMasks[i].MustDrop()
@@ -92,7 +90,7 @@ func runTrain(dataset ts.Tensor) {
 		typeIds.MustDrop()
 
 		runtime.GC()
-		fmt.Printf("Batch %3.0d\t - Used RAM: %8.0f(MiB) - Used GPU: %8.0f\n", n, debug.UsedCPUMem(), debug.UsedGPUMem())
+		fmt.Printf("Batch %3.0d\tLoss: %8.3f\tUsed GPU: %8.0f\n", n, loss, debug.UsedGPUMem())
 		// })
 
 		// next batch

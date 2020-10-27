@@ -52,12 +52,12 @@ func (bl *BertLayer) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMa
 
 	if bl.IsDecoder && encoderHiddenStates.MustDefined() {
 		var attentionOutputTmp ts.Tensor
-		attentionOutputTmp, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.None, ts.None, train)
+		attentionOutputTmp, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.NewTensor(), ts.NewTensor(), train)
 		attentionOutput, crossAttentionWeights = bl.CrossAttention.ForwardT(attentionOutputTmp, mask, encoderHiddenStates, encoderMask, train)
 		attentionOutputTmp.MustDrop()
 	} else {
-		attentionOutput, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.None, ts.None, train)
-		crossAttentionWeights = ts.None
+		attentionOutput, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.NewTensor(), ts.NewTensor(), train)
+		crossAttentionWeights = ts.NewTensor()
 	}
 
 	outputTmp := bl.Intermediate.Forward(attentionOutput)
