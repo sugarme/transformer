@@ -23,8 +23,8 @@ func runTrain(dataset ts.Tensor) {
 	}
 
 	// Model
-	// device := gotch.CPU
-	device := gotch.NewCuda().CudaIfAvailable()
+	device := gotch.CPU
+	// device := gotch.NewCuda().CudaIfAvailable()
 	vs := nn.NewVarStore(device)
 
 	lr := 1e-4
@@ -42,9 +42,9 @@ func runTrain(dataset ts.Tensor) {
 
 	debug.UsedCPUMem()
 
-	var batchSize int64 = 4
+	var batchSize int64 = 1
 	var seqLen int64 = int64(384)
-	batches := 1000
+	batches := 100
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
@@ -62,13 +62,11 @@ func runTrain(dataset ts.Tensor) {
 		startA := dataset.Idx(startIdx).MustView([]int64{batchSize}, true).MustTo(device, true)
 		// startA := ts.MustOnes([]int64{batchSize}, gotch.Int64, device)
 
-		ts.MustGradSetEnabled(true)
+		// ts.MustGradSetEnabled(true)
 		startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.NewTensor(), typeIds, ts.NewTensor(), ts.NewTensor(), true)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		endLogits.MustDrop()
 
 		startLoss := startLogits.CrossEntropyForLogits(startA)
 		opt.BackwardStep(startLoss)
@@ -76,29 +74,28 @@ func runTrain(dataset ts.Tensor) {
 		// ts.MustGradSetEnabled(false)
 
 		loss := startLoss.Float64Values()[0]
-
 		startLoss.MustDrop()
 
 		startLogits.MustDrop()
+		endLogits.MustDrop()
 
 		for i := 0; i < len(allAttentionMasks); i++ {
 			allAttentionMasks[i].MustDrop()
 			allAttentions[i].MustDrop()
 		}
 
-		inputIds.MustDrop()
 		typeIds.MustDrop()
+		inputIds.MustDrop()
+		startA.MustDrop()
 
 		runtime.GC()
-		fmt.Printf("Batch %3.0d\tLoss: %8.3f\tUsed GPU: %8.0f\n", n, loss, debug.UsedGPUMem())
+		fmt.Printf("Batch %3.0d\tLoss: %8.3f\tUsed GPU: %8.0f \tUsed RAM: %8.0f\n", n, loss, debug.UsedGPUMem(), debug.UsedCPUMem())
+		// fmt.Printf("Batch %3.0d\tUsed GPU: %8.0f \tUsed RAM: %8.0f\n", n, debug.UsedGPUMem(), debug.UsedCPUMem())
 		// })
 
 		// next batch
 		currIdx = nextIdx
 		nextIdx += batchSize
-
-		// debug.UsedGPU()
-		// fmt.Printf("Batch %v completed.\n", n)
 	}
 }
 

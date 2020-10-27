@@ -98,7 +98,11 @@ func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmb
 	posEmbeddings := posIds.Apply(be.PositionEmbeddings)
 	posIds.MustDrop()
 	tokEmbeddings := tokTypeIds.Apply(be.TokenTypeEmbeddings)
-	tokTypeIds.MustDrop()
+
+	// NOTE. only delete if not from input param
+	if !tokenTypeIds.MustDefined() {
+		tokTypeIds.MustDrop()
+	}
 
 	input := inputEmbeddings.MustAdd(posEmbeddings, true)
 	posEmbeddings.MustDrop()
