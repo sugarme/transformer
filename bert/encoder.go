@@ -109,7 +109,8 @@ func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoder
 	)
 
 	// hiddenState = hiddenStates.MustDetach(false)
-	hiddenState = hiddenStates.MustDetach(false).MustShallowClone()
+	hiddenState = hiddenStates.MustOnesLike(false)
+	hiddenState.Copy_(hiddenStates)
 
 	for _, layer := range be.Layers {
 		/* if allHiddenStates != nil {
