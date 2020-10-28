@@ -108,22 +108,25 @@ func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoder
 		hiddenState     ts.Tensor
 	)
 
-	hiddenState = hiddenStates.MustDetach(false)
+	// hiddenState = hiddenStates.MustDetach(false)
+	hiddenState = hiddenStates.MustDetach(false).MustShallowClone()
 
 	for _, layer := range be.Layers {
-		if allHiddenStates != nil {
-			allHiddenStates = append(allHiddenStates, hiddenState)
-		}
+		/* if allHiddenStates != nil {
+		 *   allHiddenStates = append(allHiddenStates, hiddenState)
+		 * } */
 
-		// allHiddenStates = append(allHiddenStates, hiddenState)
+		allHiddenStates = append(allHiddenStates, hiddenState)
 
 		stateTmp, attnWeightsTmp, _ := layer.ForwardT(hiddenState, mask, encoderHiddenStates, encoderMask, train)
 		hiddenState.MustDrop()
 		hiddenState = stateTmp
 
-		if allAttentions != nil {
-			allAttentions = append(allAttentions, attnWeightsTmp)
-		}
+		// if allAttentions != nil {
+		// allAttentions = append(allAttentions, attnWeightsTmp)
+		// }
+
+		allAttentions = append(allAttentions, attnWeightsTmp)
 	}
 
 	return hiddenState, allHiddenStates, allAttentions

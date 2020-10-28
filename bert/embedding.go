@@ -52,8 +52,9 @@ func NewBertEmbeddings(p nn.Path, config *BertConfig) *BertEmbeddings {
 func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, err error) {
 
 	var (
-		inputEmbeddings ts.Tensor
-		inputShape      []int64
+		inputEmbeddings       ts.Tensor
+		inputShape            []int64
+		deleteInputEmbeddings bool
 	)
 
 	if inputIds.MustDefined() {
@@ -62,6 +63,8 @@ func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmb
 			return retVal, err
 		} else {
 			inputEmbeddings = inputIds.ApplyT(be.WordEmbeddings, train)
+			// mark to delete later
+			deleteInputEmbeddings = true
 			inputShape = inputIds.MustSize()
 		}
 	} else {
@@ -96,21 +99,29 @@ func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmb
 	}
 
 	posEmbeddings := posIds.Apply(be.PositionEmbeddings)
-	posIds.MustDrop()
-	tokEmbeddings := tokTypeIds.Apply(be.TokenTypeEmbeddings)
+	// delete if didn't come from input param
+	if !positionIds.MustDefined() {
+		posIds.MustDrop()
+	}
 
-	// NOTE. only delete if not from input param
+	tokEmbeddings := tokTypeIds.Apply(be.TokenTypeEmbeddings)
+	// delete if didn't come from input param
 	if !tokenTypeIds.MustDefined() {
 		tokTypeIds.MustDrop()
 	}
 
-	input := inputEmbeddings.MustAdd(posEmbeddings, true)
+	input := inputEmbeddings.MustAdd(posEmbeddings, false)
+	// delete if didn't come from input param
+	if deleteInputEmbeddings {
+		inputEmbeddings.MustDrop()
+	}
+
 	posEmbeddings.MustDrop()
-	input.MustAdd_(tokEmbeddings)
+	addedInput := input.MustAdd(tokEmbeddings, true)
 	tokEmbeddings.MustDrop()
 
-	retTmp1 := input.Apply(be.LayerNorm)
-	input.MustDrop()
+	retTmp1 := addedInput.Apply(be.LayerNorm)
+	addedInput.MustDrop()
 	retVal = retTmp1.ApplyT(be.Dropout, train)
 	retTmp1.MustDrop()
 

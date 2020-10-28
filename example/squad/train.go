@@ -81,6 +81,8 @@ func runTrain(dataset ts.Tensor) {
 
 		for i := 0; i < len(allAttentionMasks); i++ {
 			allAttentionMasks[i].MustDrop()
+		}
+		for i := 0; i < len(allAttentions); i++ {
 			allAttentions[i].MustDrop()
 		}
 

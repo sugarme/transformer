@@ -76,9 +76,8 @@ func NewBertModel(p nn.Path, config *BertConfig) *BertModel {
 func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal1, retVal2 ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor, err error) {
 
 	var (
-		inputShape  []int64
-		device      gotch.Device
-		dropTensors []ts.Tensor = make([]ts.Tensor, 0)
+		inputShape []int64
+		device     gotch.Device
 	)
 
 	if inputIds.MustDefined() {
@@ -104,13 +103,12 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 		maskTs = mask
 	} else {
 		maskTs = ts.MustOnes(inputShape, gotch.Int64, device)
-		dropTensors = append(dropTensors, maskTs)
 	}
 
 	var extendedAttentionMask ts.Tensor
 	switch maskTs.Dim() {
 	case 3:
-		extendedAttentionMask = maskTs.MustUnsqueeze(1, true)
+		extendedAttentionMask = maskTs.MustUnsqueeze(1, false)
 	case 2:
 		if b.IsDecoder {
 			rangeSc := ts.IntScalar(inputShape[1])
@@ -125,10 +123,15 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 			extendedAttentionMask = causalMask.MustMatmul(maskUS2, true)
 			maskUS2.MustDrop()
 		} else {
-			extendedAttentionMask = maskTs.MustUnsqueeze(1, true).MustUnsqueeze(1, true)
+			extendedAttentionMask = maskTs.MustUnsqueeze(1, false).MustUnsqueeze(1, true)
 		}
 	default:
 		err = fmt.Errorf("Invalid attention mask dimension, must be 2 or 3, got %v\n", maskTs.Dim())
+	}
+
+	// Only delete maskTs when it didn't come from input param.
+	if !mask.MustDefined() {
+		maskTs.MustDrop()
 	}
 
 	mul1 := ts.FloatScalar(-10000.0)
@@ -136,7 +139,6 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 	mul1.MustDrop()
 	extendedAttentionMask.MustDrop()
 
-	// NOTE. encoderExtendedAttentionMask is an optional tensor
 	var encoderExtendedAttentionMask ts.Tensor
 	if b.IsDecoder && encoderHiddenStates.MustDefined() {
 		size := encoderHiddenStates.MustSize()
@@ -149,12 +151,17 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 
 		switch encoderMaskTs.Dim() {
 		case 2:
-			encoderExtendedAttentionMask = encoderMaskTs.MustUnsqueeze(1, true).MustUnsqueeze(1, true)
+			encoderExtendedAttentionMask = encoderMaskTs.MustUnsqueeze(1, false).MustUnsqueeze(1, true)
 		case 3:
-			encoderExtendedAttentionMask = encoderMaskTs.MustUnsqueeze(1, true)
+			encoderExtendedAttentionMask = encoderMaskTs.MustUnsqueeze(1, false)
 		default:
 			err = fmt.Errorf("Invalid encoder attention mask dimension, must be 2, or 3 got %v\n", encoderMaskTs.Dim())
 			return
+		}
+
+		// only delete if it didn't come from input param
+		if !encoderMask.MustDefined() {
+			encoderMaskTs.MustDrop()
 		}
 	} else {
 		encoderExtendedAttentionMask = ts.NewTensor()
@@ -173,12 +180,8 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 	pooledOutput := b.Pooler.Forward(hiddenState)
 
 	extendedAttnMask.MustDrop()
-	embeddingOutput.MustDrop() // NOTE. free up this tensor may causes panic?
+	embeddingOutput.MustDrop()
 	encoderExtendedAttentionMask.MustDrop()
-
-	for i := 0; i < len(dropTensors); i++ {
-		// dropTensors[i].MustDrop()
-	}
 
 	return hiddenState, pooledOutput, allHiddenStates, allAttentions, nil
 }
