@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
-	"runtime"
+	// "runtime"
 
 	"github.com/sugarme/transformer/bert"
 	"github.com/sugarme/transformer/util/debug"
@@ -23,8 +23,8 @@ func runTrain(dataset ts.Tensor) {
 	}
 
 	// Model
-	device := gotch.CPU
-	// device := gotch.NewCuda().CudaIfAvailable()
+	// device := gotch.CPU
+	device := gotch.NewCuda().CudaIfAvailable()
 	vs := nn.NewVarStore(device)
 
 	lr := 1e-4
@@ -42,9 +42,9 @@ func runTrain(dataset ts.Tensor) {
 
 	debug.UsedCPUMem()
 
-	var batchSize int64 = 1
+	var batchSize int64 = 6
 	var seqLen int64 = int64(384)
-	batches := 100
+	batches := int(dataset.MustSize()[1])/int(batchSize) - 1
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
@@ -63,7 +63,7 @@ func runTrain(dataset ts.Tensor) {
 		// startA := ts.MustOnes([]int64{batchSize}, gotch.Int64, device)
 
 		// ts.MustGradSetEnabled(true)
-		startLogits, endLogits, allAttentionMasks, allAttentions, err := model.ForwardT(inputIds, ts.NewTensor(), typeIds, ts.NewTensor(), ts.NewTensor(), true)
+		startLogits, _, _, _, err := model.ForwardT(inputIds, ts.NewTensor(), typeIds, ts.NewTensor(), ts.NewTensor(), true)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -74,27 +74,36 @@ func runTrain(dataset ts.Tensor) {
 		// ts.MustGradSetEnabled(false)
 
 		loss := startLoss.Float64Values()[0]
-		startLoss.MustDrop()
+		// startLoss.MustDrop()
 
 		startLogits.MustDrop()
-		endLogits.MustDrop()
+		// endLogits.MustDrop()
 
-		for i := 0; i < len(allAttentionMasks); i++ {
-			allAttentionMasks[i].MustDrop()
-		}
-		for i := 0; i < len(allAttentions); i++ {
-			allAttentions[i].MustDrop()
-		}
+		/* for i := 0; i < len(allAttentionMasks); i++ {
+		 *   allAttentionMasks[i].MustDrop()
+		 * }
+		 * for i := 0; i < len(allAttentions); i++ {
+		 *   allAttentions[i].MustDrop()
+		 * } */
 
-		typeIds.MustDrop()
-		inputIds.MustDrop()
-		startA.MustDrop()
+		// typeIds.MustDrop()
+		// inputIds.MustDrop()
+		// startA.MustDrop()
 
-		runtime.GC()
+		// runtime.GC()
 		fmt.Printf("Batch %3.0d\tLoss: %8.3f\tUsed GPU: %8.0f \tUsed RAM: %8.0f\n", n, loss, debug.UsedGPUMem(), debug.UsedCPUMem())
 		// fmt.Printf("Batch %3.0d\tUsed GPU: %8.0f \tUsed RAM: %8.0f\n", n, debug.UsedGPUMem(), debug.UsedCPUMem())
 		// })
 
+		/*     // Save model every 20k steps
+		 *     if currIdx%20000 == 0 {
+		 *       filepath := fmt.Sprintf("bert-qa-finetuned-batches-%v.gt", currIdx)
+		 *       err := vs.Save(filepath)
+		 *       if err != nil {
+		 *         log.Println(err)
+		 *       }
+		 *     }
+		 *  */
 		// next batch
 		currIdx = nextIdx
 		nextIdx += batchSize
