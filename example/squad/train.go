@@ -36,17 +36,22 @@ func runTrain(dataset ts.Tensor) {
 	_ = debug.UsedCPUMem()
 	model := bert.NewBertForQuestionAnswering(vs.Root(), config)
 	err = vs.Load("../../data/bert/bert-qa.ot")
-	// _, err = vs.LoadPartial("./bert-qa-squad-ck000003")
+	// _, err = vs.LoadPartial("./bert-qa-squad-ck000005.gt")
 	if err != nil {
 		log.Fatalf("Load model weight error: \n%v", err)
 	}
+
+	// err = saveCheckPoint(vs, "test.gt")
+	// if err != nil {
+	// log.Fatal(err)
+	// }
 
 	debug.UsedCPUMem()
 
 	var batchSize int64 = 1
 	var seqLen int64 = int64(384)
 	batches := int(dataset.MustSize()[1])/int(batchSize) - 1
-	checkPoint := 1000
+	checkPoint := 5
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
@@ -120,4 +125,19 @@ func toInt64(data []int) []int64 {
 	}
 
 	return data64
+}
+
+func saveCheckPoint(vs nn.VarStore, filePath string) error {
+	// runtime.GC()
+	// var namedTensors []ts.NamedTensor
+	// for k, v := range vs.Vars.NamedVariables {
+	// namedTensors = append(namedTensors, ts.NamedTensor{
+	// Name:   k,
+	// Tensor: v,
+	// })
+	// }
+	//
+	// return ts.SaveMulti(namedTensors, filePath)
+
+	return vs.Save(filePath)
 }
