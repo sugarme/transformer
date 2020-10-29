@@ -608,6 +608,17 @@ func NewBertForQuestionAnswering(p nn.Path, config *BertConfig) *BertForQuestion
 	}
 }
 
+// NewBertForQuestionAnseringFromBertModel creates BertForQuestionAnswering from BertModel by extending BertModel.
+func NewBertForQuestionAnsweringFromBertModel(bert *BertForMaskedLM, p nn.Path, config *BertConfig) *BertForQuestionAnswering {
+	numLabels := 2
+	qaOutputs := nn.NewLinear(p.Sub("qa_outputs"), config.HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
+
+	return &BertForQuestionAnswering{
+		bert:      bert.bert,
+		qaOutputs: &qaOutputs,
+	}
+}
+
 // Load loads model from file or model name. It also updates
 // default configuration parameters if provided.
 // This method implements `PretrainedModel` interface.

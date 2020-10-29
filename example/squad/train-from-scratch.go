@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	// "runtime"
 
 	"github.com/sugarme/transformer/bert"
 	"github.com/sugarme/transformer/util/debug"
@@ -13,44 +12,54 @@ import (
 	ts "github.com/sugarme/gotch/tensor"
 )
 
-func runTrain(dataset ts.Tensor) {
+func runTrainFromScratch(dataset ts.Tensor) {
 	// runtime.GOMAXPROCS(4)
-
-	// Config
-	config, err := bert.ConfigFromFile("../../data/bert/config-qa.json")
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// Model
 	device := gotch.CPU
 	// device := gotch.NewCuda().CudaIfAvailable()
 	vs := nn.NewVarStore(device)
 
+	// Config
+	config, err := bert.ConfigFromFile("../../data/bert/bert-base-uncased-config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = debug.UsedCPUMem()
+	bertBaseUncased := bert.NewBertForMaskedLM(vs.Root(), config)
+	err = vs.Load("../../data/bert/bert-base-uncased-model.ot")
+	if err != nil {
+		log.Fatalf("Load model weight error: \n%v", err)
+	}
+
+	model := bert.NewBertForQuestionAnsweringFromBertModel(bertBaseUncased, vs.Root(), config)
+
+	err = vs.Save("bert-base-uncased-qa-scratch.gt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	panic("stop")
+
+	// Optimizer
 	lr := 1e-4
 	opt, err := nn.DefaultAdamConfig().Build(vs, lr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_ = debug.UsedCPUMem()
-	model := bert.NewBertForQuestionAnswering(vs.Root(), config)
-	err = vs.Load("../../data/bert/bert-qa.ot")
-	// _, err = vs.LoadPartial("./bert-qa-squad-ck000003")
-	if err != nil {
-		log.Fatalf("Load model weight error: \n%v", err)
-	}
-
 	debug.UsedCPUMem()
 
-	var batchSize int64 = 1
+	var batchSize int64 = 2
 	var seqLen int64 = int64(384)
-	batches := int(dataset.MustSize()[1])/int(batchSize) - 1
-	checkPoint := 1000
+	// batches := int(dataset.MustSize()[1])/int(batchSize) - 1
+	batches := 7
+	checkPoint := 3
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
 	for n := 0; n < batches; n++ {
+
 		// ts.NoGrad(func() {
 		inputIdsIdx := []ts.TensorIndexer{ts.NewSelect(0), ts.NewNarrow(currIdx, nextIdx)}
 		inputIds := dataset.Idx(inputIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
@@ -97,13 +106,23 @@ func runTrain(dataset ts.Tensor) {
 		// fmt.Printf("Batch %3.0d\tUsed GPU: %8.0f \tUsed RAM: %8.0f\n", n, debug.UsedGPUMem(), debug.UsedCPUMem())
 		// })
 
-		// Save model at check point
-		if n > 0 && n%checkPoint == 0 {
-			fmt.Printf("Saving model at checkpoint %06d...\n", currIdx)
-			filepath := fmt.Sprintf("bert-qa-squad-ck%06d.gt", currIdx)
-			err := vs.Save(filepath)
+		/*     // Save model every 20k steps
+		 *     if currIdx%20000 == 0 {
+		 *       filepath := fmt.Sprintf("bert-qa-finetuned-batches-%v.gt", currIdx)
+		 *       err := vs.Save(filepath)
+		 *       if err != nil {
+		 *         log.Println(err)
+		 *       }
+		 *     }
+		 *  */
+
+		// save model checkpoint
+		if n != 0 && n%checkPoint == 0 {
+			fmt.Printf("saving checkpoint %06d...\n", currIdx)
+			filePath := fmt.Sprintf("bert-qa-squad-ck%06d.gt", currIdx)
+			err = vs.Save(filePath)
 			if err != nil {
-				log.Println(err)
+				log.Fatal(err)
 			}
 		}
 
@@ -111,13 +130,5 @@ func runTrain(dataset ts.Tensor) {
 		currIdx = nextIdx
 		nextIdx += batchSize
 	}
-}
 
-func toInt64(data []int) []int64 {
-	var data64 []int64
-	for _, v := range data {
-		data64 = append(data64, int64(v))
-	}
-
-	return data64
 }

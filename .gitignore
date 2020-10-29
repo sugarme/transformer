@@ -9,5 +9,7 @@ example/testdata/
 *.log
 
 *.bak
+*.gt
+*.ot
 
 data/
