@@ -34,12 +34,10 @@ func runTrainFromScratch(dataset ts.Tensor) {
 
 	model := bert.NewBertForQuestionAnsweringFromBertModel(bertBaseUncased, vs.Root(), config)
 
-	err = vs.Save("bert-base-uncased-qa-scratch.gt")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	panic("stop")
+	// err = vs.Save("bert-base-uncased-qa-scratch.gt")
+	// if err != nil {
+	// log.Fatal(err)
+	// }
 
 	// Optimizer
 	lr := 1e-4
@@ -50,11 +48,11 @@ func runTrainFromScratch(dataset ts.Tensor) {
 
 	debug.UsedCPUMem()
 
-	var batchSize int64 = 2
+	var batchSize int64 = 1
 	var seqLen int64 = int64(384)
 	// batches := int(dataset.MustSize()[1])/int(batchSize) - 1
-	batches := 7
-	checkPoint := 3
+	batches := 100
+	checkPoint := 50
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
@@ -74,7 +72,7 @@ func runTrainFromScratch(dataset ts.Tensor) {
 		// startA := ts.MustOnes([]int64{batchSize}, gotch.Int64, device)
 
 		// ts.MustGradSetEnabled(true)
-		startLogits, _, _, _, err := model.ForwardT(inputIds, ts.NewTensor(), typeIds, ts.NewTensor(), ts.NewTensor(), true)
+		startLogits, noop1, _, _, err := model.ForwardT(inputIds, ts.NewTensor(), typeIds, ts.NewTensor(), ts.NewTensor(), true)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -85,17 +83,30 @@ func runTrainFromScratch(dataset ts.Tensor) {
 		// ts.MustGradSetEnabled(false)
 
 		loss := startLoss.Float64Values()[0]
-		// startLoss.MustDrop()
+		startLoss.MustDrop()
 
 		startLogits.MustDrop()
 		// endLogits.MustDrop()
 
-		/* for i := 0; i < len(allAttentionMasks); i++ {
-		 *   allAttentionMasks[i].MustDrop()
-		 * }
-		 * for i := 0; i < len(allAttentions); i++ {
-		 *   allAttentions[i].MustDrop()
-		 * } */
+		noop1.MustDrop()
+		// for i := 0; i < len(noop2); i++ {
+		// if noop2[i].MustDefined() {
+		// noop2[i].MustDrop()
+		// }
+		// }
+		// for i := 0; i < len(noop3); i++ {
+		// if noop3[i].MustDefined() {
+		// noop3[i].MustDrop()
+		// }
+		// }
+
+		// for i := 0; i < len(allAttentionMasks); i++ {
+		// allAttentionMasks[i].MustDrop()
+		// }
+
+		// for i := 0; i < len(allAttentions); i++ {
+		// allAttentions[i].MustDrop()
+		// }
 
 		// typeIds.MustDrop()
 		// inputIds.MustDrop()

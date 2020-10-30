@@ -50,7 +50,8 @@ func runTrain(dataset ts.Tensor) {
 
 	var batchSize int64 = 1
 	var seqLen int64 = int64(384)
-	batches := int(dataset.MustSize()[1])/int(batchSize) - 1
+	// batches := int(dataset.MustSize()[1])/int(batchSize) - 1
+	batches := 6
 	checkPoint := 5
 
 	var currIdx int64 = 0
@@ -127,17 +128,79 @@ func toInt64(data []int) []int64 {
 	return data64
 }
 
-func saveCheckPoint(vs nn.VarStore, filePath string) error {
-	// runtime.GC()
-	// var namedTensors []ts.NamedTensor
-	// for k, v := range vs.Vars.NamedVariables {
-	// namedTensors = append(namedTensors, ts.NamedTensor{
-	// Name:   k,
-	// Tensor: v,
-	// })
-	// }
-	//
-	// return ts.SaveMulti(namedTensors, filePath)
+func runTrainFromCheckPoint(dataset ts.Tensor, filePath string, start int64) {
 
-	return vs.Save(filePath)
+	// Config
+	// NOTE. Must be same config that model checkpoint used.
+	// config, err := bert.ConfigFromFile("../../data/bert/config-qa-modified.json")
+	config, err := bert.ConfigFromFile("../../data/bert/config-qa.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Model
+	device := gotch.CPU
+	// device := gotch.NewCuda().CudaIfAvailable()
+	vs := nn.NewVarStore(device)
+
+	lr := 1e-4
+	opt, err := nn.DefaultAdamConfig().Build(vs, lr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_ = debug.UsedCPUMem()
+	model := bert.NewBertForQuestionAnswering(vs.Root(), config)
+
+	debug.UsedCPUMem()
+	loadCheckPoint(filePath, vs, device)
+	debug.UsedCPUMem()
+
+	var batchSize int64 = 1
+	var seqLen int64 = int64(384)
+	batches := int(dataset.MustSize()[1])/int(batchSize) - 1 - int(start/batchSize)
+	checkPoint := 3
+
+	var currIdx int64 = start
+	var nextIdx int64 = start + batchSize
+	for n := 0; n < batches; n++ {
+		inputIdsIdx := []ts.TensorIndexer{ts.NewSelect(0), ts.NewNarrow(currIdx, nextIdx)}
+		inputIds := dataset.Idx(inputIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
+
+		typeIdsIdx := []ts.TensorIndexer{ts.NewSelect(1), ts.NewNarrow(currIdx, nextIdx)}
+		typeIds := dataset.Idx(typeIdsIdx).MustView([]int64{batchSize, seqLen}, true).MustTo(device, true)
+
+		startIdx := []ts.TensorIndexer{ts.NewSelect(3), ts.NewNarrow(currIdx, nextIdx), ts.NewNarrow(0, 1)}
+		startA := dataset.Idx(startIdx).MustView([]int64{batchSize}, true).MustTo(device, true)
+
+		startLogits, endLogits, _, _, err := model.ForwardT(inputIds, ts.NewTensor(), typeIds, ts.NewTensor(), ts.NewTensor(), true)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		startLoss := startLogits.CrossEntropyForLogits(startA)
+		opt.BackwardStep(startLoss)
+
+		loss := startLoss.Float64Values()[0]
+		startLoss.MustDrop()
+
+		startLogits.MustDrop()
+		endLogits.MustDrop()
+
+		fmt.Printf("Batch %3.0d\tLoss: %8.3f\tUsed GPU: %8.0f \tUsed RAM: %8.0f\n", n, loss, debug.UsedGPUMem(), debug.UsedCPUMem())
+
+		// Save model at check point
+		if n > 0 && n%checkPoint == 0 {
+			fmt.Printf("Saving model at checkpoint %06d...\n", currIdx)
+			filepath := fmt.Sprintf("bert-qa-squad-ck%06d.gt", currIdx)
+			err := vs.Save(filepath)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+
+		// next batch
+		currIdx = nextIdx
+		nextIdx += batchSize
+	}
 }
