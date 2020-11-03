@@ -10,13 +10,13 @@ import (
 	ts "github.com/sugarme/gotch/tensor"
 )
 
-func loadCheckPoint(filePath string, vs nn.VarStore, device gotch.Device) {
+func loadCheckPoint(filePath string, vs *nn.VarStore, device gotch.Device) {
 	namedTensors, err := ts.LoadMultiWithDevice(filePath, device)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	vars := make(map[string]ts.Tensor, 0)
+	vars := make(map[string]*ts.Tensor, 0)
 	for _, x := range namedTensors {
 		vars[x.Name] = x.Tensor
 	}

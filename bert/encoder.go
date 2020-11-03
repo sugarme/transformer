@@ -20,7 +20,7 @@ type BertLayer struct {
 }
 
 // NewBertLayer creates a new BertLayer.
-func NewBertLayer(p nn.Path, config *BertConfig) *BertLayer {
+func NewBertLayer(p *nn.Path, config *BertConfig) *BertLayer {
 	path := p.Sub("attention")
 	attention := NewBertAttention(path, config)
 	var (
@@ -43,15 +43,15 @@ func NewBertLayer(p nn.Path, config *BertConfig) *BertLayer {
 }
 
 // ForwardT forwards pass through the model.
-func (bl *BertLayer) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt1, retValOpt2 ts.Tensor) {
+func (bl *BertLayer) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask *ts.Tensor, train bool) (retVal, retValOpt1, retValOpt2 *ts.Tensor) {
 	var (
-		attentionOutput       ts.Tensor
-		attentionWeights      ts.Tensor
-		crossAttentionWeights ts.Tensor
+		attentionOutput       *ts.Tensor
+		attentionWeights      *ts.Tensor
+		crossAttentionWeights *ts.Tensor
 	)
 
 	if bl.IsDecoder && encoderHiddenStates.MustDefined() {
-		var attentionOutputTmp ts.Tensor
+		var attentionOutputTmp *ts.Tensor
 		attentionOutputTmp, attentionWeights = bl.Attention.ForwardT(hiddenStates, mask, ts.NewTensor(), ts.NewTensor(), train)
 		attentionOutput, crossAttentionWeights = bl.CrossAttention.ForwardT(attentionOutputTmp, mask, encoderHiddenStates, encoderMask, train)
 		attentionOutputTmp.MustDrop()
@@ -79,7 +79,7 @@ type BertEncoder struct {
 }
 
 // NewBertEncoder creates a new BertEncoder.
-func NewBertEncoder(p nn.Path, config *BertConfig) *BertEncoder {
+func NewBertEncoder(p *nn.Path, config *BertConfig) *BertEncoder {
 	path := p.Sub("layer")
 	outputAttentions := false
 	if config.OutputAttentions {
@@ -101,11 +101,11 @@ func NewBertEncoder(p nn.Path, config *BertConfig) *BertEncoder {
 }
 
 // ForwardT forwards pass through the model.
-func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
+func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask *ts.Tensor, train bool) (retVal *ts.Tensor, retValOpt1, retValOpt2 []ts.Tensor) {
 	var (
 		allHiddenStates []ts.Tensor
 		allAttentions   []ts.Tensor
-		hiddenState     ts.Tensor
+		hiddenState     *ts.Tensor
 	)
 
 	// hiddenState = hiddenStates.MustDetach(false)
@@ -117,7 +117,7 @@ func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoder
 		 *   allHiddenStates = append(allHiddenStates, hiddenState)
 		 * } */
 
-		allHiddenStates = append(allHiddenStates, hiddenState)
+		allHiddenStates = append(allHiddenStates, *hiddenState)
 
 		stateTmp, attnWeightsTmp, _ := layer.ForwardT(hiddenState, mask, encoderHiddenStates, encoderMask, train)
 		hiddenState.MustDrop()
@@ -127,7 +127,7 @@ func (be *BertEncoder) ForwardT(hiddenStates, mask, encoderHiddenStates, encoder
 		// allAttentions = append(allAttentions, attnWeightsTmp)
 		// }
 
-		allAttentions = append(allAttentions, attnWeightsTmp)
+		allAttentions = append(allAttentions, *attnWeightsTmp)
 	}
 
 	return hiddenState, allHiddenStates, allAttentions
@@ -143,20 +143,20 @@ type BertPooler struct {
 }
 
 // NewBertPooler creates a new BertPooler.
-func NewBertPooler(p nn.Path, config *BertConfig) *BertPooler {
+func NewBertPooler(p *nn.Path, config *BertConfig) *BertPooler {
 	path := p.Sub("dense")
 	lconfig := nn.DefaultLinearConfig()
 	lin := nn.NewLinear(path, config.HiddenSize, config.HiddenSize, lconfig)
 
-	return &BertPooler{&lin}
+	return &BertPooler{lin}
 }
 
 // Forward forwards pass through the model.
-func (bp *BertPooler) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
+func (bp *BertPooler) Forward(hiddenStates *ts.Tensor) *ts.Tensor {
 
 	selectTs := hiddenStates.MustSelect(1, 0, false)
 	tmp := selectTs.Apply(bp.Lin)
 	selectTs.MustDrop()
-	retVal = tmp.MustTanh(true)
+	retVal := tmp.MustTanh(true)
 	return retVal
 }

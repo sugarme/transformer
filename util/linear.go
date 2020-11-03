@@ -17,10 +17,10 @@ func DefaultLinearNoBiasConfig() *LinearNoBiasConfig {
 }
 
 type LinearNoBias struct {
-	Ws ts.Tensor
+	Ws *ts.Tensor
 }
 
-func NewLinearNoBias(vs nn.Path, inDim, outDim int64, config *LinearNoBiasConfig) *LinearNoBias {
+func NewLinearNoBias(vs *nn.Path, inDim, outDim int64, config *LinearNoBiasConfig) *LinearNoBias {
 
 	return &LinearNoBias{
 		Ws: vs.NewVar("weight", []int64{outDim, inDim}, config.WsInit),
@@ -28,9 +28,9 @@ func NewLinearNoBias(vs nn.Path, inDim, outDim int64, config *LinearNoBiasConfig
 }
 
 // Forward implements Module interface for LinearNoBias
-func (lnb *LinearNoBias) Forward(xs ts.Tensor) (retVal ts.Tensor) {
+func (lnb *LinearNoBias) Forward(xs *ts.Tensor) *ts.Tensor {
 	wsT := lnb.Ws.MustT(false)
-	retVal = xs.MustMatmul(wsT, false)
+	retVal := xs.MustMatmul(wsT, false)
 	wsT.MustDrop()
 
 	return retVal

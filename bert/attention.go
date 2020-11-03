@@ -26,7 +26,7 @@ type BertSelfAttention struct {
 }
 
 // NewBertSelfAttention creates a new `BertSelfAttention`
-func NewBertSelfAttention(p nn.Path, config *BertConfig) *BertSelfAttention {
+func NewBertSelfAttention(p *nn.Path, config *BertConfig) *BertSelfAttention {
 	if config.HiddenSize%config.NumAttentionHeads != 0 {
 		log.Fatal("Hidden size is not a multiple of the number of attention heads.")
 	}
@@ -45,38 +45,36 @@ func NewBertSelfAttention(p nn.Path, config *BertConfig) *BertSelfAttention {
 		AttentionHeadSize: attentionHeadSize,
 		Dropout:           dropout,
 		OutputAttentions:  outputAttentions,
-		Query:             &query,
-		Key:               &key,
-		Value:             &value,
+		Query:             query,
+		Key:               key,
+		Value:             value,
 	}
 
 }
 
-func (bsa *BertSelfAttention) splitHeads(x ts.Tensor, bs, dimPerHead int64) (retVal ts.Tensor) {
+func (bsa *BertSelfAttention) splitHeads(x *ts.Tensor, bs, dimPerHead int64) *ts.Tensor {
 
 	xview := x.MustView([]int64{bs, -1, bsa.NumAttentionHeads, dimPerHead}, false)
 
 	return xview.MustTranspose(1, 2, true)
 }
 
-func (bsa *BertSelfAttention) flatten(x ts.Tensor, bs, dimPerHead int64) (retVal ts.Tensor) {
+func (bsa *BertSelfAttention) flatten(x *ts.Tensor, bs, dimPerHead int64) *ts.Tensor {
 
 	xT := x.MustTranspose(1, 2, false)
 	xCon := xT.MustContiguous(true)
-	retVal = xCon.MustView([]int64{bs, -1, bsa.NumAttentionHeads * dimPerHead}, true)
-
-	return retVal
+	return xCon.MustView([]int64{bs, -1, bsa.NumAttentionHeads * dimPerHead}, true)
 }
 
 // ForwardT implements ModuleT interface for BertSelfAttention
 //
 // NOTE. mask, encoderHiddenStates, encoderMask are  optional tensors
 // for `None` value, `ts.None` can be used.
-func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, retValOpt ts.Tensor) {
+func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask *ts.Tensor, train bool) (retVal, retValOpt *ts.Tensor) {
 
 	var (
-		key   ts.Tensor
-		value ts.Tensor
+		key   *ts.Tensor
+		value *ts.Tensor
 	)
 
 	// NOTE. use `if...else` instead of exclusive `if` block to avoid
@@ -111,8 +109,8 @@ func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, 
 
 	// Calculate score
 	var (
-		scores    ts.Tensor
-		keyLayerT ts.Tensor
+		scores    *ts.Tensor
+		keyLayerT *ts.Tensor
 	)
 	if mask.MustDefined() {
 		keyLayerTTmp := keyLayer.MustTranspose(-1, -2, true)
@@ -151,7 +149,7 @@ type BertSelfOutput struct {
 	Dropout   *util.Dropout
 }
 
-func NewBertSelfOutput(p nn.Path, config *BertConfig) *BertSelfOutput {
+func NewBertSelfOutput(p *nn.Path, config *BertConfig) *BertSelfOutput {
 
 	path := p.Sub("dense")
 	lconfig := nn.DefaultLinearConfig()
@@ -163,16 +161,16 @@ func NewBertSelfOutput(p nn.Path, config *BertConfig) *BertSelfOutput {
 	layerNorm := nn.NewLayerNorm(p.Sub("LayerNorm"), []int64{config.HiddenSize}, layerNormConfig)
 	dropout := util.NewDropout(config.HiddenDropoutProb)
 
-	return &BertSelfOutput{&linear, &layerNorm, dropout}
+	return &BertSelfOutput{linear, layerNorm, dropout}
 }
 
-func (bso *BertSelfOutput) ForwardT(hiddenStates ts.Tensor, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
+func (bso *BertSelfOutput) ForwardT(hiddenStates *ts.Tensor, inputTensor *ts.Tensor, train bool) *ts.Tensor {
 
 	state1 := hiddenStates.Apply(bso.Linear)
 	state2 := state1.ApplyT(bso.Dropout, train)
 	state3 := inputTensor.MustAdd(state2, false)
 
-	retVal = state3.Apply(bso.LayerNorm)
+	retVal := state3.Apply(bso.LayerNorm)
 	state1.MustDrop()
 	state2.MustDrop()
 	state3.MustDrop()
@@ -188,14 +186,14 @@ type BertAttention struct {
 	Output *BertSelfOutput
 }
 
-func NewBertAttention(p nn.Path, config *BertConfig) *BertAttention {
+func NewBertAttention(p *nn.Path, config *BertConfig) *BertAttention {
 	self := NewBertSelfAttention(p.Sub("self"), config)
 	output := NewBertSelfOutput(p.Sub("output"), config)
 
 	return &BertAttention{self, output}
 }
 
-func (ba *BertAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask ts.Tensor, train bool) (retVal, RetValOpt ts.Tensor) {
+func (ba *BertAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask *ts.Tensor, train bool) (retVal, RetValOpt *ts.Tensor) {
 
 	selfOutput, attentionWeights := ba.Bsa.ForwardT(hiddenStates, mask, encoderHiddenStates, encoderMask, train)
 	attentionOutput := ba.Output.ForwardT(selfOutput, hiddenStates, train)
@@ -213,7 +211,7 @@ type BertIntermediate struct {
 	Activation util.ActivationFn // interface
 }
 
-func NewBertIntermediate(p nn.Path, config *BertConfig) *BertIntermediate {
+func NewBertIntermediate(p *nn.Path, config *BertConfig) *BertIntermediate {
 	lconfig := nn.DefaultLinearConfig()
 	lin := nn.NewLinear(p.Sub("dense"), config.HiddenSize, config.IntermediateSize, lconfig)
 
@@ -222,14 +220,14 @@ func NewBertIntermediate(p nn.Path, config *BertConfig) *BertIntermediate {
 		log.Fatalf("Unsupported activation function - %v\n", config.HiddenAct)
 	}
 
-	return &BertIntermediate{&lin, actFn}
+	return &BertIntermediate{lin, actFn}
 }
 
-func (bi *BertIntermediate) Forward(hiddenStates ts.Tensor) (retVal ts.Tensor) {
+func (bi *BertIntermediate) Forward(hiddenStates *ts.Tensor) *ts.Tensor {
 
 	states := hiddenStates.Apply(bi.Lin)
 
-	retVal = bi.Activation.Fwd(states)
+	retVal := bi.Activation.Fwd(states)
 	states.MustDrop()
 
 	return retVal
@@ -244,7 +242,7 @@ type BertOutput struct {
 	Dropout   *util.Dropout
 }
 
-func NewBertOutput(p nn.Path, config *BertConfig) *BertOutput {
+func NewBertOutput(p *nn.Path, config *BertConfig) *BertOutput {
 	lconfig := nn.DefaultLinearConfig()
 
 	lin := nn.NewLinear(p.Sub("dense"), config.IntermediateSize, config.HiddenSize, lconfig)
@@ -255,16 +253,16 @@ func NewBertOutput(p nn.Path, config *BertConfig) *BertOutput {
 
 	dropout := util.NewDropout(config.HiddenDropoutProb)
 
-	return &BertOutput{&lin, &layerNorm, dropout}
+	return &BertOutput{lin, layerNorm, dropout}
 }
 
-func (bo *BertOutput) ForwardT(hiddenStates, inputTensor ts.Tensor, train bool) (retVal ts.Tensor) {
+func (bo *BertOutput) ForwardT(hiddenStates, inputTensor *ts.Tensor, train bool) *ts.Tensor {
 
 	state1 := hiddenStates.Apply(bo.Lin)
 	state2 := state1.ApplyT(bo.Dropout, train)
 	state3 := inputTensor.MustAdd(state2, false)
 
-	retVal = state3.Apply(bo.LayerNorm)
+	retVal := state3.Apply(bo.LayerNorm)
 
 	state1.MustDrop()
 	state2.MustDrop()

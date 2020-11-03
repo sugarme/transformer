@@ -107,7 +107,7 @@ People of all ages who experience fever and/or cough associated with difficulty 
 	// positionIds := ts.MustArange(ts.IntScalar(seqLen), gotch.Int64, device).MustExpand([]int64{batchSize, seqLen}, true, true)
 	// mask := ts.MustOnes([]int64{batchSize, seqLen}, gotch.Int64, device)
 
-	var startScores, endScores ts.Tensor
+	var startScores, endScores *ts.Tensor
 	ts.NoGrad(func() {
 		startScores, endScores, _, _, err = model.ForwardT(inputTensor, ts.None, tokenTypeIds, ts.None, ts.None, false)
 		if err != nil {
@@ -115,8 +115,8 @@ People of all ages who experience fever and/or cough associated with difficulty 
 		}
 	})
 
-	answerStart := startScores.MustGet(0).MustArgmax(0, false, false).Int64Values()[0]
-	answerEnd := endScores.MustGet(0).MustArgmax(0, false, false).Int64Values()[0]
+	answerStart := startScores.MustGet(0).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+	answerEnd := endScores.MustGet(0).MustArgmax([]int64{0}, false, false).Int64Values()[0]
 
 	fmt.Printf("answer start: '%v'\n", answerStart)
 	fmt.Printf("answer end: '%v'\n", answerEnd)

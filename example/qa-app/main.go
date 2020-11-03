@@ -77,7 +77,7 @@ func main() {
 		inputTensor := ts.MustOfSlice(toInt64(encoding.Ids)).MustTo(device, true).MustView([]int64{batchSize, seqLen}, true)
 		tokenTypeIds := ts.MustOfSlice(toInt64(encoding.TypeIds)).MustTo(device, true).MustView([]int64{batchSize, seqLen}, true)
 
-		var startScores, endScores ts.Tensor
+		var startScores, endScores *ts.Tensor
 		ts.NoGrad(func() {
 			startScores, endScores, _, _, err = model.ForwardT(inputTensor, ts.None, tokenTypeIds, ts.None, ts.None, false)
 			if err != nil {
@@ -85,8 +85,8 @@ func main() {
 			}
 		})
 
-		answerStart := startScores.MustGet(0).MustArgmax(0, false, true).Int64Values()[0]
-		answerEnd := endScores.MustGet(0).MustArgmax(0, false, true).Int64Values()[0]
+		answerStart := startScores.MustGet(0).MustArgmax([]int64{0}, false, true).Int64Values()[0]
+		answerEnd := endScores.MustGet(0).MustArgmax([]int64{0}, false, true).Int64Values()[0]
 		startScores.MustDrop()
 		endScores.MustDrop()
 

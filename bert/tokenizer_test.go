@@ -9,7 +9,7 @@ import (
 
 func TestBertTokenizer(t *testing.T) {
 	var tk *bert.Tokenizer = bert.NewTokenizer()
-	err := tk.Load("bert-base-uncased", nil)
+	err := tk.Load("bert-base-uncased", "", nil)
 	if err != nil {
 		t.Error(err)
 	}

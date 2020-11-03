@@ -12,7 +12,7 @@ import (
 
 // BertEmbedding defines interface for BertModel or RoBertaModel.
 type BertEmbedding interface {
-	ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (ts.Tensor, error)
+	ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds *ts.Tensor, train bool) (*ts.Tensor, error)
 }
 
 type BertEmbeddings struct {
@@ -24,7 +24,7 @@ type BertEmbeddings struct {
 }
 
 // NewBertEmbeddings builds a new BertEmbeddings
-func NewBertEmbeddings(p nn.Path, config *BertConfig) *BertEmbeddings {
+func NewBertEmbeddings(p *nn.Path, config *BertConfig) *BertEmbeddings {
 	embeddingConfig := nn.DefaultEmbeddingConfig()
 	embeddingConfig.PaddingIdx = 0
 
@@ -45,22 +45,22 @@ func NewBertEmbeddings(p nn.Path, config *BertConfig) *BertEmbeddings {
 
 	dropout := util.NewDropout(config.HiddenDropoutProb)
 
-	return &BertEmbeddings{&wordEmbeddings, &positionEmbeddings, &tokenTypeEmbeddings, &layerNorm, dropout}
+	return &BertEmbeddings{wordEmbeddings, positionEmbeddings, tokenTypeEmbeddings, layerNorm, dropout}
 }
 
 // ForwardT implements BertEmbedding interface, passes through the embedding layer
-func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (retVal ts.Tensor, err error) {
+func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmbeds *ts.Tensor, train bool) (*ts.Tensor, error) {
 
 	var (
-		inputEmbeddings       ts.Tensor
+		inputEmbeddings       *ts.Tensor
 		inputShape            []int64
 		deleteInputEmbeddings bool
 	)
 
 	if inputIds.MustDefined() {
 		if inputEmbeds.MustDefined() {
-			err = fmt.Errorf("Only one of input Ids or input embeddings may be set.")
-			return retVal, err
+			err := fmt.Errorf("Only one of input Ids or input embeddings may be set.")
+			return nil, err
 		} else {
 			inputEmbeddings = inputIds.ApplyT(be.WordEmbeddings, train)
 			// mark to delete later
@@ -73,14 +73,14 @@ func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmb
 			size := inputEmbeds.MustSize()
 			inputShape = []int64{size[0], size[1]}
 		} else {
-			err = fmt.Errorf("Only one of input Ids or input embeddings may be set.")
-			return retVal, err
+			err := fmt.Errorf("Only one of input Ids or input embeddings may be set.")
+			return nil, err
 		}
 	}
 
 	seqLength := inputEmbeddings.MustSize()[1]
 
-	var posIds ts.Tensor
+	var posIds *ts.Tensor
 	if positionIds.MustDefined() {
 		posIds = positionIds
 	} else {
@@ -91,7 +91,7 @@ func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmb
 		posIds = tmp2.MustExpand(inputShape, true, true)
 	}
 
-	var tokTypeIds ts.Tensor
+	var tokTypeIds *ts.Tensor
 	if tokenTypeIds.MustDefined() {
 		tokTypeIds = tokenTypeIds
 	} else {
@@ -122,7 +122,7 @@ func (be *BertEmbeddings) ForwardT(inputIds, tokenTypeIds, positionIds, inputEmb
 
 	retTmp1 := addedInput.Apply(be.LayerNorm)
 	addedInput.MustDrop()
-	retVal = retTmp1.ApplyT(be.Dropout, train)
+	retVal := retTmp1.ApplyT(be.Dropout, train)
 	retTmp1.MustDrop()
 
 	return retVal, nil

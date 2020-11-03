@@ -45,7 +45,7 @@ func loadSquadV2(datasetName string, isTraining, returnTensorDataset bool) {
 // NOTE. datasetName can be either "dev" or "train", otherwise, panic.
 // This is default to BERT and fix params.
 // TODO. setup input params
-func LoadSquadV2(datasetName string) ts.Tensor {
+func LoadSquadV2(datasetName string) *ts.Tensor {
 
 	filePath := fmt.Sprintf("/tmp/squadv2-%v.gt", datasetName)
 

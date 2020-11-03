@@ -17,6 +17,6 @@ import (
 // environment if existing, otherwise it will be cached in `$HOME/.cache/transformers/` directory.
 // If `modleNameOrPath` is valid URL, file will be downloaded and cached.
 // Finally, model weights will be loaded to `varstore`.
-func LoadModel(model pretrained.Model, modelNameOrPath string, config pretrained.Config, customParams map[string]interface{}, vs nn.VarStore) error {
+func LoadModel(model pretrained.Model, modelNameOrPath string, config pretrained.Config, customParams map[string]interface{}, vs *nn.VarStore) error {
 	return model.Load(modelNameOrPath, config, customParams, vs)
 }

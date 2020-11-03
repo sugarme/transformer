@@ -55,18 +55,18 @@ func ExampleBertForMaskedLM() {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
-	var output ts.Tensor
+	var output *ts.Tensor
 	ts.NoGrad(func() {
-		output, _, _ = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, ts.None, ts.None, false)
+		output, _, _ = model.ForwardT(inputTensor, ts.NewTensor(), ts.NewTensor(), ts.NewTensor(), ts.NewTensor(), ts.NewTensor(), ts.NewTensor(), false)
 	})
 
-	index1 := output.MustGet(0).MustGet(4).MustArgmax(0, false, false).Int64Values()[0]
-	index2 := output.MustGet(1).MustGet(7).MustArgmax(0, false, false).Int64Values()[0]
+	index1 := output.MustGet(0).MustGet(4).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+	index2 := output.MustGet(1).MustGet(7).MustArgmax([]int64{0}, false, false).Int64Values()[0]
 
 	got1, ok := tk.IdToToken(int(index1))
 	if !ok {

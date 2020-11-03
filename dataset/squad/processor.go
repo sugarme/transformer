@@ -103,22 +103,22 @@ func NewFeature(inputIds []int, attentionMask []int, tokenTypeIds []int, clsInde
 
 // Result constructs a Squad result that can be used to evaluate a model's output on the SQuAD dataset.
 type Result struct {
-	UniqueId       string    // The unique identifier corresponding to that example.
-	StartLogits    ts.Tensor // The logits corresponding to the start of the answer.
-	EndLogits      ts.Tensor // The logits corresponding to the end of the answer.
+	UniqueId       string     // The unique identifier corresponding to that example.
+	StartLogits    *ts.Tensor // The logits corresponding to the start of the answer.
+	EndLogits      *ts.Tensor // The logits corresponding to the end of the answer.
 	StartStopIndex int
 	EndStopIndex   int
-	ClsLogits      ts.Tensor
+	ClsLogits      *ts.Tensor
 }
 
-func NewResult(uniqueId string, start, end ts.Tensor, startStopIndex, endStopIndex int, clsLogits ts.Tensor) *Result {
+func NewResult(uniqueId string, start, end *ts.Tensor, startStopIndex, endStopIndex int, clsLogits *ts.Tensor) *Result {
 	return &Result{
 		UniqueId:       uniqueId,
 		StartLogits:    start,
 		EndLogits:      end,
 		StartStopIndex: -1,
 		EndStopIndex:   -1,
-		ClsLogits:      ts.None,
+		ClsLogits:      ts.NewTensor(),
 	}
 }
 
@@ -312,7 +312,7 @@ func isMaxContext(docSpans []tokenizer.Encoding, currentSpanIndex, position int)
 //   + clsIndex (repeated values to make size=maxSeqLen)
 //   + pMasks
 //   + isImpossible (repeated values to make size=maxSeqLen)
-func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkName string, maxSeqLen, docStride, maxQueryLen int, sepToken, padToken string, clsIndex int, isTraining bool, returnTensorDataset bool) ([]Feature, ts.Tensor) {
+func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkName string, maxSeqLen, docStride, maxQueryLen int, sepToken, padToken string, clsIndex int, isTraining bool, returnTensorDataset bool) ([]Feature, *ts.Tensor) {
 	// TODO: setup running in parallel
 	var features []Feature
 
@@ -428,7 +428,7 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 			allClsIndex       []int64
 			allIsImpossible   []bool
 
-			dataset ts.Tensor
+			dataset *ts.Tensor
 		)
 
 		for _, feat := range features {
@@ -497,11 +497,11 @@ func ConvertExamplesToFeatures(examples []Example, tk *tokenizer.Tokenizer, tkNa
 			defer endPositionsTs.MustDrop()
 			defer isImposiblesTs.MustDrop()
 
-			featTensors = []ts.Tensor{inputIdsTs, attentionMasksTs, tokenTypeIdsTs, startPositionsTs, endPositionsTs, clsIndexesTs, pMasksTs, isImposiblesTs}
+			featTensors = []ts.Tensor{*inputIdsTs, *attentionMasksTs, *tokenTypeIdsTs, *startPositionsTs, *endPositionsTs, *clsIndexesTs, *pMasksTs, *isImposiblesTs}
 		} else {
 			allFeatureIndexTs := ts.MustArange(tensor.IntScalar(int64(len(features))), gotch.Int64, gotch.CPU).MustUnsqueeze(1, true).MustExpand([]int64{-1, int64(maxSeqLen)}, true, true).MustUnsqueeze(0, true)
 
-			featTensors = []ts.Tensor{inputIdsTs, attentionMasksTs, tokenTypeIdsTs, allFeatureIndexTs, clsIndexesTs, pMasksTs}
+			featTensors = []ts.Tensor{*inputIdsTs, *attentionMasksTs, *tokenTypeIdsTs, *allFeatureIndexTs, *clsIndexesTs, *pMasksTs}
 			defer allFeatureIndexTs.MustDrop()
 		}
 

@@ -7,7 +7,7 @@ import (
 )
 
 // Equal compares 2 tensors in terms of shape, and every element values.
-func Equal(tensorA, tensorB ts.Tensor) bool {
+func Equal(tensorA, tensorB *ts.Tensor) bool {
 	var equal int64 = 0
 	// 1. Compare shape
 	if reflect.DeepEqual(tensorA.MustSize(), tensorB.MustSize()) {
