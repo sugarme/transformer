@@ -52,18 +52,28 @@ This package is in active mode of building and there are many changes ahead. Hen
             log.Fatal(err)
         }
 
-        sentence1 := "Looks like one [MASK] is missing"
-        sentence2 := "It was a very nice and [MASK] day"
+        sentence1 := "Looks like one [MASK] is missing."
+        sentence2 := "It was a very nice and [MASK] day."
+        sentence3 := "Do you like to [MASK] to the cinema tonight?"
 
-        var input []tokenizer.EncodeInput
-        input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence1)))
-        input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence2)))
-
-        encodings, err := tk.EncodeBatch(input, true)
+        var encodings []tokenizer.Encoding
+        enc1, err := tk.EncodeSingle(sentence1, true)
         if err != nil {
             log.Fatal(err)
         }
+        encodings = append(encodings, *enc1)
+        enc2, err := tk.EncodeSingle(sentence2, true)
+        if err != nil {
+            log.Fatal(err)
+        }
+        encodings = append(encodings, *enc2)
+        enc3, err := tk.EncodeSingle(sentence3, true)
+        if err != nil {
+            log.Fatal(err)
+        }
+        encodings = append(encodings, *enc3)
 
+        // Find max length of token Ids from slice of encodings
         var maxLen int = 0
         for _, en := range encodings {
             if len(en.Ids) > maxLen {
@@ -77,35 +87,40 @@ This package is in active mode of building and there are many changes ahead. Hen
             for i := 0; i < len(en.Ids); i++ {
                 tokInput[i] = int64(en.Ids[i])
             }
+            tensors = append(tensors, *ts.TensorFrom(tokInput))
+        }
 
-            tensors = append(tensors, ts.TensorFrom(tokInput))
+        for i := 0; i < len(encodings); i++ {
+            fmt.Printf("%v - tokens: %q\n", i, encodings[i].Tokens)
         }
 
         inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
-        var output ts.Tensor
+        fmt.Println("inputTensor:")
+        inputTensor.Print()
+
+        var output *ts.Tensor
         ts.NoGrad(func() {
             output, _, _ = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, ts.None, ts.None, false)
         })
-        index1 := output.MustGet(0).MustGet(4).MustArgmax(0, false, false).Int64Values()[0]
-        index2 := output.MustGet(1).MustGet(7).MustArgmax(0, false, false).Int64Values()[0]
 
-        got1, ok := tk.IdToToken(int(index1))
-        if !ok {
-            fmt.Printf("Cannot find a corresponding word for the given id (%v) in vocab.\n", index1)
-        }
-        got2, ok := tk.IdToToken(int(index2))
-        if !ok {
-            fmt.Printf("Cannot find a corresponding word for the given id (%v) in vocab.\n", index2)
-        }
+        fmt.Printf("output size: %v\n", output.MustSize())
 
-        fmt.Println(got1)
-        fmt.Println(got2)
-        
-        // Output:
-        // person
-        // pleasant
+        index1 := output.MustGet(0).MustGet(4).MustShallowClone().MustArgmax([]int64{0}, false, false).Int64Values()[0]
+        index2 := output.MustGet(1).MustGet(7).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+        index3 := output.MustGet(2).MustGet(4).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+
+        word1, _ := tk.IdToToken(int(index1))
+        fmt.Printf("Input: '%v' \t- Output: '%v'\n", sentence1, word1)
+
+        word2, _ := tk.IdToToken(int(index2))
+        fmt.Printf("Input: '%v' \t- Output: '%v'\n", sentence2, word2)
+
+        word3, _ := tk.IdToToken(int(index3))
+        fmt.Printf("Input: '%v' \t- Output: '%v'\n", sentence3, word3)
     }
 ```
+
+![Bert Mask Language Model Example](bert-mask-example.jpg)
 
 ## Getting Started
 

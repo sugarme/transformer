@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/sugarme/gotch"
+	"github.com/sugarme/gotch/nn"
 	ts "github.com/sugarme/gotch/tensor"
 	"github.com/sugarme/tokenizer"
 
@@ -21,9 +22,10 @@ func ExampleBertForMaskedLM() {
 
 	// Model
 	device := gotch.CPU
+	vs := nn.NewVarStore(device)
 
 	model := new(bert.BertForMaskedLM)
-	err = model.Load("../data/bert/model.ot", config, nil, device)
+	err = model.Load("../data/bert/model.ot", config, nil, vs)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -32,14 +34,17 @@ func ExampleBertForMaskedLM() {
 	sentence1 := "Looks like one [MASK] is missing"
 	sentence2 := "It was a very nice and [MASK] day"
 
-	var input []tokenizer.EncodeInput
-	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence1)))
-	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence2)))
-
-	encodings, err := tk.EncodeBatch(input, true)
+	var encodings []tokenizer.Encoding
+	enc1, err := tk.EncodeSingle(sentence1, true)
 	if err != nil {
 		log.Fatal(err)
 	}
+	encodings = append(encodings, *enc1)
+	enc2, err := tk.EncodeSingle(sentence2, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	encodings = append(encodings, *enc2)
 
 	var maxLen int = 0
 	for _, en := range encodings {
@@ -86,71 +91,74 @@ func ExampleBertForMaskedLM() {
 	 *  */
 }
 
-/*
- * func ExampleBertForSequenceClassification() {
- *
- *   device := gotch.CPU
- *   vs := nn.NewVarStore(device)
- *
- *   config := bert.ConfigFromFile("../data/bert/config.json")
- *
- *   var dummyLabelMap map[int64]string = make(map[int64]string)
- *   dummyLabelMap[0] = "positive"
- *   dummyLabelMap[1] = "negative"
- *   dummyLabelMap[3] = "neutral"
- *
- *   config.Id2Label = dummyLabelMap
- *   config.OutputAttentions = true
- *   config.OutputHiddenStates = true
- *   model := bert.NewBertForSequenceClassification(vs.Root(), config)
- *   tk := getBertTokenizer()
- *
- *   // Define input
- *   sentence1 := "Looks like one thing is missing"
- *   sentence2 := `It's like comparing oranges to apples`
- *   var input []tokenizer.EncodeInput
- *   input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence1)))
- *   input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence2)))
- *   encodings, err := tk.EncodeBatch(input, true)
- *   if err != nil {
- *     log.Fatal(err)
- *   }
- *
- *   // Find max length of token Ids from slice of encodings
- *   var maxLen int = 0
- *   for _, en := range encodings {
- *     if len(en.Ids) > maxLen {
- *       maxLen = len(en.Ids)
- *     }
- *   }
- *
- *   var tensors []ts.Tensor
- *   for _, en := range encodings {
- *     var tokInput []int64 = make([]int64, maxLen)
- *     for i := 0; i < len(en.Ids); i++ {
- *       tokInput[i] = int64(en.Ids[i])
- *     }
- *
- *     tensors = append(tensors, ts.TensorFrom(tokInput))
- *   }
- *
- *   inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
- *
- *   var (
- *     output                         ts.Tensor
- *     allHiddenStates, allAttentions []ts.Tensor
- *   )
- *
- *   ts.NoGrad(func() {
- *     output, allHiddenStates, allAttentions = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, false)
- *   })
- *
- *   fmt.Println(output.MustSize())
- *   fmt.Println(len(allHiddenStates))
- *   fmt.Println(len(allAttentions))
- *
- *   // Output:
- *   // [2 3]
- *   // 12
- *   // 12
- * } */
+func ExampleBertForSequenceClassification() {
+
+	device := gotch.CPU
+	vs := nn.NewVarStore(device)
+
+	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var dummyLabelMap map[int64]string = make(map[int64]string)
+	dummyLabelMap[0] = "positive"
+	dummyLabelMap[1] = "negative"
+	dummyLabelMap[3] = "neutral"
+
+	config.Id2Label = dummyLabelMap
+	config.OutputAttentions = true
+	config.OutputHiddenStates = true
+	model := bert.NewBertForSequenceClassification(vs.Root(), config)
+	tk := getBertTokenizer()
+
+	// Define input
+	sentence1 := "Looks like one thing is missing"
+	sentence2 := `It's like comparing oranges to apples`
+
+	var input []tokenizer.EncodeInput
+	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence1)))
+	input = append(input, tokenizer.NewSingleEncodeInput(tokenizer.NewInputSequence(sentence2)))
+	encodings, err := tk.EncodeBatch(input, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Find max length of token Ids from slice of encodings
+	var maxLen int = 0
+	for _, en := range encodings {
+		if len(en.Ids) > maxLen {
+			maxLen = len(en.Ids)
+		}
+	}
+
+	var tensors []ts.Tensor
+	for _, en := range encodings {
+		var tokInput []int64 = make([]int64, maxLen)
+		for i := 0; i < len(en.Ids); i++ {
+			tokInput[i] = int64(en.Ids[i])
+		}
+
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
+	}
+
+	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
+
+	var (
+		output                         *ts.Tensor
+		allHiddenStates, allAttentions []ts.Tensor
+	)
+
+	ts.NoGrad(func() {
+		output, allHiddenStates, allAttentions = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, false)
+	})
+
+	fmt.Println(output.MustSize())
+	fmt.Println(len(allHiddenStates))
+	fmt.Println(len(allAttentions))
+
+	// Output:
+	// [2 3]
+	// 12
+	// 12
+}
