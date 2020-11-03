@@ -139,19 +139,19 @@ func bertForMaskedLM() {
 
 	index1 := output.MustGet(0).MustGet(4).MustShallowClone().MustArgmax([]int64{0}, false, false).Int64Values()[0]
 	index2 := output.MustGet(1).MustGet(7).MustArgmax([]int64{0}, false, false).Int64Values()[0]
-	index3 := output.MustGet(2).MustGet(4).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+	index3 := output.MustGet(2).MustGet(5).MustArgmax([]int64{0}, false, false).Int64Values()[0]
 
 	word1, ok := tk.IdToToken(int(index1))
 	if !ok {
 		fmt.Printf("Cannot find a corresponding word for the given id (%v) in vocab.\n", index1)
 	}
-	fmt.Printf("Input: '%v' \t- Output: '%v'\n", sentence1, word1)
+	fmt.Printf("Input: '%v' \t\t- Output: '%v'\n", sentence1, word1)
 
 	word2, ok := tk.IdToToken(int(index2))
 	if !ok {
 		fmt.Printf("Cannot find a corresponding word for the given id (%v) in vocab.\n", index2)
 	}
-	fmt.Printf("Input: '%v' \t- Output: '%v'\n", sentence2, word2)
+	fmt.Printf("Input: '%v' \t\t- Output: '%v'\n", sentence2, word2)
 
 	word3, ok := tk.IdToToken(int(index3))
 	if !ok {
