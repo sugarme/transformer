@@ -27,3 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - None
 
+## [0.1.3]
+
+### Changed
+- Updated to `gotch v0.1.3.x` that uses `Pytorch v1.7.0`

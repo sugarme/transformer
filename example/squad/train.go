@@ -48,11 +48,11 @@ func runTrain(dataset ts.Tensor) {
 
 	debug.UsedCPUMem()
 
-	var batchSize int64 = 1
+	var batchSize int64 = 4
 	var seqLen int64 = int64(384)
-	// batches := int(dataset.MustSize()[1])/int(batchSize) - 1
-	batches := 6
-	checkPoint := 5
+	batches := int(dataset.MustSize()[1])/int(batchSize) - 1
+	// batches := 6
+	checkPoint := 500
 
 	var currIdx int64 = 0
 	var nextIdx int64 = batchSize
@@ -86,14 +86,14 @@ func runTrain(dataset ts.Tensor) {
 
 		startLogits.MustDrop()
 		// endLogits.MustDrop()
-
-		/* for i := 0; i < len(allAttentionMasks); i++ {
-		 *   allAttentionMasks[i].MustDrop()
-		 * }
-		 * for i := 0; i < len(allAttentions); i++ {
-		 *   allAttentions[i].MustDrop()
-		 * } */
-
+		/*
+		 *     for i := 0; i < len(allAttentionMasks); i++ {
+		 *       allAttentionMasks[i].MustDrop()
+		 *     }
+		 *     for i := 0; i < len(allAttentions); i++ {
+		 *       allAttentions[i].MustDrop()
+		 *     }
+		 *  */
 		// typeIds.MustDrop()
 		// inputIds.MustDrop()
 		// startA.MustDrop()
@@ -156,10 +156,10 @@ func runTrainFromCheckPoint(dataset ts.Tensor, filePath string, start int64) {
 	loadCheckPoint(filePath, vs, device)
 	debug.UsedCPUMem()
 
-	var batchSize int64 = 1
+	var batchSize int64 = 4
 	var seqLen int64 = int64(384)
 	batches := int(dataset.MustSize()[1])/int(batchSize) - 1 - int(start/batchSize)
-	checkPoint := 3
+	checkPoint := 500
 
 	var currIdx int64 = start
 	var nextIdx int64 = start + batchSize
