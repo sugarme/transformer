@@ -70,7 +70,8 @@ func bertForMaskedLM() {
 	// fmt.Printf("Bert Configuration:\n%+v\n", config)
 
 	model := bert.NewBertForMaskedLM(vs.Root(), config)
-	err := vs.Load("../../data/bert/model.ot")
+	// err := vs.Load("../../data/bert/bert-base-uncased-model.ot")
+	err := vs.Load("../../data/bert/model.gt")
 	if err != nil {
 		log.Fatalf("Load model weight error: \n%v", err)
 	}

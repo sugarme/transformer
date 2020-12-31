@@ -13,3 +13,5 @@ example/testdata/
 *.ot
 
 data/
+
+.ipynb_checkpoints
