@@ -531,7 +531,8 @@ func NewBertForTokenClassification(p *nn.Path, config *BertConfig) *BertForToken
 	bert := NewBertModel(p.Sub("bert"), config)
 	dropout := util.NewDropout(config.HiddenDropoutProb)
 
-	numLabels := len(config.Id2Label)
+	// numLabels := len(config.Id2Label)
+	numLabels := config.NumLabels
 	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, int64(numLabels), nn.DefaultLinearConfig())
 
 	return &BertForTokenClassification{
