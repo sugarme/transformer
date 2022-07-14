@@ -116,7 +116,7 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 			rangeSc.MustDrop()
 			causalMaskTmp := seqIds.MustUnsqueeze(0, false).MustUnsqueeze(0, true).MustRepeat([]int64{inputShape[0], inputShape[1], 1}, true)
 			seqIdsTmp := seqIds.MustUnsqueeze(0, true).MustUnsqueeze(1, true)
-			causalMask := causalMaskTmp.MustLe1(seqIdsTmp, true)
+			causalMask := causalMaskTmp.MustLeTensor(seqIdsTmp, true)
 			seqIdsTmp.MustDrop()
 			maskUS1 := mask.MustUnsqueeze(1, false)
 			maskUS2 := maskUS1.MustUnsqueeze(1, true)
@@ -135,7 +135,7 @@ func (b *BertModel) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmb
 	}
 
 	mul1 := ts.FloatScalar(-10000.0)
-	extendedAttnMask := extendedAttentionMask.MustOnesLike(false).MustSub(extendedAttentionMask, true).MustMul1(mul1, true)
+	extendedAttnMask := extendedAttentionMask.MustOnesLike(false).MustSub(extendedAttentionMask, true).MustMulScalar(mul1, true)
 	mul1.MustDrop()
 	extendedAttentionMask.MustDrop()
 
@@ -687,8 +687,8 @@ func (qa *BertForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, posit
 	hiddenState.MustDrop()
 
 	logits := sequenceOutput.MustSplit(1, -1, true) // -1 : split along last size
-	startLogits := logits[0].MustSqueeze1(int64(-1), false)
-	endLogits := logits[1].MustSqueeze1(int64(-1), false)
+	startLogits := logits[0].MustSqueezeDim(int64(-1), false)
+	endLogits := logits[1].MustSqueezeDim(int64(-1), false)
 	for _, logit := range logits {
 		logit.MustDrop()
 	}

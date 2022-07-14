@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	// "strings"
@@ -19,7 +20,15 @@ import (
 	"github.com/sugarme/transformer/bert"
 )
 
+var input string
+
+func init() {
+	flag.StringVar(&input, "input", "Steve went to Paris", "Enter an input text to make inference.")
+}
+
 func main() {
+	flag.Parse()
+
 	// Config
 	config, err := bert.ConfigFromFile("../../data/bert/config-ner.json")
 	if err != nil {
@@ -44,20 +53,18 @@ func main() {
 
 	// Labels
 	labelMap := map[int64]string{
-		1:  "O",
-		2:  "B-MISC",
-		3:  "I-MISC",
-		4:  "B-PER",
-		5:  "I-PER",
-		6:  "B-ORG",
-		7:  "I-ORG",
-		8:  "B-LOC",
-		9:  "I-LOC",
-		10: "[CLS]",
-		11: "[SEP]",
+		1:  "O",      // Outside of the named entity
+		2:  "B-MISC", // Beginning of a miscellaneous entity right after another miscellaneous entity
+		3:  "I-MISC", // Miscellaneous entity
+		4:  "B-PER",  // Beginning of a person's name right after another person's name
+		5:  "I-PER",  //  Person's name
+		6:  "B-ORG",  // Beginning of a organisation right after another org
+		7:  "I-ORG",  // Organisation
+		8:  "B-LOC",  // Beginning of a location right after another location.
+		9:  "I-LOC",  // Location
+		10: "[CLS]",  // CLS token
+		11: "[SEP]",  // SEP token
 	}
-
-	input := "Steve went to Paris"
 
 	encoding, err := tk.EncodeSingle(input, true)
 	if err != nil {

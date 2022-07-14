@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
@@ -63,7 +64,8 @@ func getBert() (retVal *tokenizer.Tokenizer) {
 
 func bertForMaskedLM() {
 
-	device := gotch.CPU
+	// device := gotch.CPU
+	device := gotch.CudaIfAvailable()
 	vs := nn.NewVarStore(device)
 
 	config, _ := bert.ConfigFromFile("../../data/bert/config.json")
@@ -132,9 +134,12 @@ func bertForMaskedLM() {
 	inputTensor.Print()
 
 	var output *ts.Tensor
+	start := time.Now()
 	ts.NoGrad(func() {
 		output, _, _ = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, ts.None, ts.None, false)
 	})
+
+	fmt.Printf("Taken time: %vms\n", time.Since(start).Microseconds())
 
 	fmt.Printf("output size: %v\n", output.MustSize())
 
@@ -216,9 +221,12 @@ func bertForSequenceClassification() {
 		allHiddenStates, allAttentions []ts.Tensor
 	)
 
+	start := time.Now()
 	ts.NoGrad(func() {
 		output, allHiddenStates, allAttentions = model.ForwardT(inputTensor, ts.NewTensor(), ts.NewTensor(), ts.NewTensor(), ts.NewTensor(), false)
 	})
+
+	fmt.Printf("Taken time: %v\n", time.Since(start).Milliseconds())
 
 	fmt.Printf("output size: %v\n", output.MustSize())
 

@@ -104,7 +104,7 @@ func (bsa *BertSelfAttention) ForwardT(hiddenStates, mask, encoderHiddenStates, 
 	// Query layer
 	size := math.Sqrt(float64(bsa.AttentionHeadSize))
 	sizeSc := ts.FloatScalar(size)
-	queryLayer := query.MustDiv1(sizeSc, true)
+	queryLayer := query.MustDivScalar(sizeSc, true)
 	sizeSc.MustDrop()
 
 	// Calculate score

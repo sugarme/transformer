@@ -12,7 +12,7 @@ func Equal(tensorA, tensorB *ts.Tensor) bool {
 	// 1. Compare shape
 	if reflect.DeepEqual(tensorA.MustSize(), tensorB.MustSize()) {
 		// 2. Compare values
-		equal = tensorA.MustEq1(tensorB, false).MustAll(false).Int64Values()[0]
+		equal = tensorA.MustEqTensor(tensorB, false).MustAll(false).Int64Values()[0]
 	}
 	if equal == 0 {
 		return false
