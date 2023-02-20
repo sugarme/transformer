@@ -26,31 +26,10 @@ func TestConfigFromPretrained_ModelName(t *testing.T) {
 	}
 }
 
-// With local file
-func TestConfigFromPretrained_LocalFile(t *testing.T) {
-	filename := "data/bert/config.json"
-	var config *bert.BertConfig = new(bert.BertConfig)
-	err := transformer.LoadConfig(config, filename, nil)
-	if err != nil {
-		t.Error(err)
-	}
-
-	wantVocabSize := int64(30522)
-	gotVocabSize := config.VocabSize
-
-	if !reflect.DeepEqual(wantVocabSize, gotVocabSize) {
-		t.Errorf("Want: %v\n", wantVocabSize)
-		t.Errorf("Got: %v\n", gotVocabSize)
-	}
-}
-
 // No custom params
 func TestConfigFromPretrained(t *testing.T) {
-	// bertURL := transformer.AllPretrainedConfigs["bert-base-uncased"]
-	url := "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json"
-
 	var config *bert.BertConfig = new(bert.BertConfig)
-	err := transformer.LoadConfig(config, url, nil)
+	err := transformer.LoadConfig(config, "bert-base-uncased", nil)
 	if err != nil {
 		t.Error(err)
 	}
@@ -67,15 +46,13 @@ func TestConfigFromPretrained(t *testing.T) {
 
 // With custom params
 func TestConfigFromPretrained_CustomParams(t *testing.T) {
-	url := "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json"
-
 	params := map[string]interface{}{
 		"VocabSize": int64(2000),
 		"NumLabels": int64(4),
 	}
 
 	var config *bert.BertConfig = new(bert.BertConfig)
-	err := transformer.LoadConfig(config, url, params)
+	err := transformer.LoadConfig(config, "bert-base-uncased", params)
 	if err != nil {
 		t.Error(err)
 	}

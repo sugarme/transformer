@@ -9,7 +9,7 @@ import (
 	"github.com/sugarme/tokenizer/pretokenizer"
 	"github.com/sugarme/tokenizer/processor"
 
-	"github.com/sugarme/transformer/pretrained"
+	// "github.com/sugarme/transformer/pretrained"
 	"github.com/sugarme/transformer/util"
 )
 
@@ -33,16 +33,7 @@ func NewTokenizer() *Tokenizer {
 }
 
 func (bt *Tokenizer) Load(modelNameOrPath string, params map[string]interface{}) error {
-	var urlOrFilename string
-	// If modelName, infer to default vocab filename:
-	if vocabFile, ok := pretrained.BertVocabs[modelNameOrPath]; ok {
-		urlOrFilename = vocabFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilename = modelNameOrPath
-	}
-
-	cachedFile, err := util.CachedPath(urlOrFilename)
+	cachedFile, err := util.CachedPath(modelNameOrPath, "vocab.txt")
 	if err != nil {
 		return err
 	}

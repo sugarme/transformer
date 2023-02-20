@@ -9,7 +9,6 @@ import (
 	"github.com/sugarme/tokenizer/pretokenizer"
 	"github.com/sugarme/tokenizer/processor"
 
-	"github.com/sugarme/transformer/pretrained"
 	"github.com/sugarme/transformer/util"
 )
 
@@ -26,33 +25,16 @@ func NewTokenizer() *Tokenizer {
 
 // Load loads Roberta tokenizer from pretrain vocab and merges files.
 func (t *Tokenizer) Load(modelNameOrPath string, params map[string]interface{}) error {
-	var urlOrFilenameVocab string
-	// If modelName, infer to default vocab filename:
-	if vocabFile, ok := pretrained.RobertaVocabs[modelNameOrPath]; ok {
-		urlOrFilenameVocab = vocabFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilenameVocab = modelNameOrPath
+	vocabFile, err := util.CachedPath("roberta-base", "vocab.json")
+	if err != nil {
+		return err
 	}
-	cachedFileVocab, err := util.CachedPath(urlOrFilenameVocab)
+	mergesFile, err := util.CachedPath("roberta-base", "merges.txt")
 	if err != nil {
 		return err
 	}
 
-	var urlOrFilenameMerges string
-	// If modelName, infer to default vocab filename:
-	if mergesFile, ok := pretrained.RobertaMerges[modelNameOrPath]; ok {
-		urlOrFilenameMerges = mergesFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilenameMerges = modelNameOrPath
-	}
-	cachedFileMerges, err := util.CachedPath(urlOrFilenameMerges)
-	if err != nil {
-		return err
-	}
-
-	model, err := bpe.NewBpeFromFiles(cachedFileVocab, cachedFileMerges)
+	model, err := bpe.NewBpeFromFiles(vocabFile, mergesFile)
 	if err != nil {
 		return err
 	}

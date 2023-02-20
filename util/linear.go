@@ -2,7 +2,7 @@ package util
 
 import (
 	"github.com/sugarme/gotch/nn"
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/ts"
 )
 
 type LinearNoBiasConfig struct {
@@ -17,18 +17,23 @@ func DefaultLinearNoBiasConfig() *LinearNoBiasConfig {
 }
 
 type LinearNoBias struct {
-	Ws ts.Tensor
+	Ws *ts.Tensor
 }
 
-func NewLinearNoBias(vs nn.Path, inDim, outDim int64, config *LinearNoBiasConfig) *LinearNoBias {
+func NewLinearNoBias(vs *nn.Path, inDim, outDim int64, config *LinearNoBiasConfig) (*LinearNoBias, error) {
+
+	ws, err := vs.NewVar("weight", []int64{outDim, inDim}, config.WsInit)
+	if err != nil {
+		return nil, err
+	}
 
 	return &LinearNoBias{
-		Ws: vs.NewVar("weight", []int64{outDim, inDim}, config.WsInit),
-	}
+		Ws: ws,
+	}, nil
 }
 
 // Forward implements Module interface for LinearNoBias
-func (lnb *LinearNoBias) Forward(xs ts.Tensor) (retVal ts.Tensor) {
+func (lnb *LinearNoBias) Forward(xs *ts.Tensor) (retVal *ts.Tensor) {
 	wsT := lnb.Ws.MustT(false)
 	retVal = xs.MustMatmul(wsT, false)
 	wsT.MustDrop()

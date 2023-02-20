@@ -1,7 +1,7 @@
 package bert
 
 import (
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/ts"
 )
 
 // TensorOpt is a function type to create pointer to tensor.

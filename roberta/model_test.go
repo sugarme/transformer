@@ -8,7 +8,8 @@ import (
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/pickle"
+	"github.com/sugarme/gotch/ts"
 	"github.com/sugarme/tokenizer"
 	"github.com/sugarme/tokenizer/model/bpe"
 	"github.com/sugarme/tokenizer/normalizer"
@@ -16,6 +17,7 @@ import (
 	"github.com/sugarme/tokenizer/processor"
 	"github.com/sugarme/transformer/bert"
 	"github.com/sugarme/transformer/roberta"
+	"github.com/sugarme/transformer/util"
 )
 
 func getRobertaTokenizer(vocabFile string, mergeFile string) (retVal *tokenizer.Tokenizer) {
@@ -52,7 +54,11 @@ func TestRobertaForMaskedLM(t *testing.T) {
 
 	// Config
 	config := new(bert.BertConfig)
-	err := config.Load("../data/roberta/roberta-base-config.json", nil)
+	configFile, err := util.CachedPath("roberta-base", "config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = config.Load(configFile, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,14 +67,32 @@ func TestRobertaForMaskedLM(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	model := roberta.NewRobertaForMaskedLM(vs.Root(), config)
-	err = vs.Load("../data/roberta/roberta-base-model.gt")
+	model, err := roberta.NewRobertaForMaskedLM(vs.Root(), config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	modelFile, err := util.CachedPath("roberta-base", "pytorch_model.bin")
+	if err != nil {
+		log.Fatal(err)
+	}
+	// err = vs.Load("../data/roberta/roberta-base-model.gt")
+	err = pickle.LoadAll(vs, modelFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Roberta tokenizer
-	tk := getRobertaTokenizer("../data/roberta/roberta-base-vocab.json", "../data/roberta/roberta-base-merges.txt")
+	vocabFile, err := util.CachedPath("roberta-base", "vocab.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mergesFile, err := util.CachedPath("roberta-base", "merges.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tk := getRobertaTokenizer(vocabFile, mergesFile)
 
 	sentence1 := "Looks like one <mask> is missing"
 	sentence2 := "It's like comparing <mask> to apples"
@@ -110,12 +134,12 @@ func TestRobertaForMaskedLM(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
-	var output ts.Tensor
+	var output *ts.Tensor
 	ts.NoGrad(func() {
 		output, _, _, err = model.Forward(inputTensor, ts.None, ts.None, ts.None, ts.None, ts.None, ts.None, false)
 		if err != nil {
@@ -123,8 +147,8 @@ func TestRobertaForMaskedLM(t *testing.T) {
 		}
 	})
 
-	index1 := output.MustGet(0).MustGet(4).MustArgmax(0, false, false).Int64Values()[0]
-	index2 := output.MustGet(1).MustGet(5).MustArgmax(0, false, false).Int64Values()[0]
+	index1 := output.MustGet(0).MustGet(4).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+	index2 := output.MustGet(1).MustGet(5).MustArgmax([]int64{0}, false, false).Int64Values()[0]
 	gotMask1 := tk.Decode([]int{int(index1)}, false)
 	gotMask2 := tk.Decode([]int{int(index2)}, false)
 
@@ -147,7 +171,11 @@ func TestRobertaForSequenceClassification(t *testing.T) {
 
 	// Config
 	config := new(bert.BertConfig)
-	err := config.Load("../data/roberta/roberta-base-config.json", nil)
+	configFile, err := util.CachedPath("roberta-base", "config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = config.Load(configFile, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -167,7 +195,16 @@ func TestRobertaForSequenceClassification(t *testing.T) {
 	model := roberta.NewRobertaForSequenceClassification(vs.Root(), config)
 
 	// Roberta tokenizer
-	tk := getRobertaTokenizer("../data/roberta/roberta-base-vocab.json", "../data/roberta/roberta-base-merges.txt")
+	vocabFile, err := util.CachedPath("roberta-base", "vocab.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mergesFile, err := util.CachedPath("roberta-base", "merges.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tk := getRobertaTokenizer(vocabFile, mergesFile)
 
 	sentence1 := "Looks like one thing is missing"
 	sentence2 := "It's like comparing oranges to apples"
@@ -200,13 +237,13 @@ func TestRobertaForSequenceClassification(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
 	var (
-		output                   ts.Tensor
+		output                   *ts.Tensor
 		hiddenStates, attentions []ts.Tensor
 	)
 
@@ -244,7 +281,11 @@ func TestRobertaForMultipleChoice(t *testing.T) {
 	config := new(bert.BertConfig)
 	config.OutputAttentions = true
 	config.OutputHiddenStates = true
-	err := config.Load("../data/roberta/roberta-base-config.json", nil)
+	configFile, err := util.CachedPath("roberta-base", "config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = config.Load(configFile, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -256,7 +297,16 @@ func TestRobertaForMultipleChoice(t *testing.T) {
 	model := roberta.NewRobertaForMultipleChoice(vs.Root(), config)
 
 	// Roberta tokenizer
-	tk := getRobertaTokenizer("../data/roberta/roberta-base-vocab.json", "../data/roberta/roberta-base-merges.txt")
+	vocabFile, err := util.CachedPath("roberta-base", "vocab.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mergesFile, err := util.CachedPath("roberta-base", "merges.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tk := getRobertaTokenizer(vocabFile, mergesFile)
 
 	sentence1 := "Looks like one <mask> is missing"
 	sentence2 := "It's like comparing <mask> to apples"
@@ -289,13 +339,13 @@ func TestRobertaForMultipleChoice(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true).MustUnsqueeze(0, true)
 
 	var (
-		output                   ts.Tensor
+		output                   *ts.Tensor
 		hiddenStates, attentions []ts.Tensor
 	)
 	ts.NoGrad(func() {
@@ -331,7 +381,11 @@ func TestRobertaForTokenClassification(t *testing.T) {
 
 	// Config
 	config := new(bert.BertConfig)
-	err := config.Load("../data/roberta/roberta-base-config.json", nil)
+	configFile, err := util.CachedPath("roberta-base", "config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = config.Load(configFile, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -352,7 +406,16 @@ func TestRobertaForTokenClassification(t *testing.T) {
 	model := roberta.NewRobertaForTokenClassification(vs.Root(), config)
 
 	// Roberta tokenizer
-	tk := getRobertaTokenizer("../data/roberta/roberta-base-vocab.json", "../data/roberta/roberta-base-merges.txt")
+	vocabFile, err := util.CachedPath("roberta-base", "vocab.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mergesFile, err := util.CachedPath("roberta-base", "merges.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tk := getRobertaTokenizer(vocabFile, mergesFile)
 
 	sentence1 := "Looks like one thing is missing"
 	sentence2 := "It's like comparing oranges to apples"
@@ -385,13 +448,13 @@ func TestRobertaForTokenClassification(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
 	var (
-		output                   ts.Tensor
+		output                   *ts.Tensor
 		hiddenStates, attentions []ts.Tensor
 	)
 
@@ -428,7 +491,12 @@ func TestRobertaForQuestionAnswering(t *testing.T) {
 
 	// Config
 	config := new(bert.BertConfig)
-	err := config.Load("../data/roberta/roberta-base-config.json", nil)
+	configFile, err := util.CachedPath("roberta-base", "config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = config.Load(configFile, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -448,7 +516,16 @@ func TestRobertaForQuestionAnswering(t *testing.T) {
 	model := roberta.NewRobertaForQuestionAnswering(vs.Root(), config)
 
 	// Roberta tokenizer
-	tk := getRobertaTokenizer("../data/roberta/roberta-base-vocab.json", "../data/roberta/roberta-base-merges.txt")
+	vocabFile, err := util.CachedPath("roberta-base", "vocab.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mergesFile, err := util.CachedPath("roberta-base", "merges.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tk := getRobertaTokenizer(vocabFile, mergesFile)
 
 	sentence1 := "Looks like one thing is missing"
 	sentence2 := "It's like comparing oranges to apples"
@@ -481,13 +558,13 @@ func TestRobertaForQuestionAnswering(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
 	var (
-		startScores, endScores   ts.Tensor
+		startScores, endScores   *ts.Tensor
 		hiddenStates, attentions []ts.Tensor
 	)
 

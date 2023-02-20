@@ -1,12 +1,14 @@
-// roberta package implements Roberta transformer model.
 package roberta
+
+// roberta package implements Roberta transformer model.
 
 import (
 	// "fmt"
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/pickle"
+	"github.com/sugarme/gotch/ts"
 
 	"github.com/sugarme/transformer/bert"
 	"github.com/sugarme/transformer/pretrained"
@@ -18,31 +20,37 @@ type RobertaLMHead struct {
 	dense     *nn.Linear
 	decoder   *util.LinearNoBias
 	layerNorm *nn.LayerNorm
-	bias      ts.Tensor
+	bias      *ts.Tensor
 }
 
 // NewRobertaLMHead creates new RobertaLMHead.
-func NewRobertaLMHead(p nn.Path, config *bert.BertConfig) *RobertaLMHead {
+func NewRobertaLMHead(p *nn.Path, config *bert.BertConfig) (*RobertaLMHead, error) {
 	dense := nn.NewLinear(p.Sub("dense"), config.HiddenSize, config.HiddenSize, nn.DefaultLinearConfig())
 
 	layerNormConfig := nn.DefaultLayerNormConfig()
 	layerNormConfig.Eps = 1e-12
 	layerNorm := nn.NewLayerNorm(p.Sub("layer_norm"), []int64{config.HiddenSize}, layerNormConfig)
 
-	decoder := util.NewLinearNoBias(p.Sub("decoder"), config.HiddenSize, config.VocabSize, util.DefaultLinearNoBiasConfig())
+	decoder, err := util.NewLinearNoBias(p.Sub("decoder"), config.HiddenSize, config.VocabSize, util.DefaultLinearNoBiasConfig())
+	if err != nil {
+		return nil, err
+	}
 
-	bias := p.NewVar("bias", []int64{config.VocabSize}, nn.NewKaimingUniformInit())
+	bias, err := p.NewVar("bias", []int64{config.VocabSize}, nn.NewKaimingUniformInit())
+	if err != nil {
+		return nil, err
+	}
 
 	return &RobertaLMHead{
-		dense:     &dense,
+		dense:     dense,
 		decoder:   decoder,
-		layerNorm: &layerNorm,
+		layerNorm: layerNorm,
 		bias:      bias,
-	}
+	}, nil
 }
 
 // Foward forwards pass through RobertaLMHead model.
-func (rh *RobertaLMHead) Forward(hiddenStates ts.Tensor) ts.Tensor {
+func (rh *RobertaLMHead) Forward(hiddenStates *ts.Tensor) *ts.Tensor {
 	gelu := util.NewGelu()
 	appliedDense := hiddenStates.Apply(rh.dense)
 	geluFwd := gelu.Fwd(appliedDense)
@@ -67,30 +75,33 @@ type RobertaForMaskedLM struct {
 }
 
 // NewRobertaForMaskedLM builds a new RobertaForMaskedLM.
-func NewRobertaForMaskedLM(p nn.Path, config *bert.BertConfig) *RobertaForMaskedLM {
-	roberta := bert.NewBertModel(p.Sub("roberta"), config)
-	lmHead := NewRobertaLMHead(p.Sub("lm_head"), config)
+func NewRobertaForMaskedLM(p *nn.Path, config *bert.BertConfig) (*RobertaForMaskedLM, error) {
+	roberta := bert.NewBertModel(p.Sub("roberta"), config, false)
+	lmHead, err := NewRobertaLMHead(p.Sub("lm_head"), config)
+	if err != nil {
+		return nil, err
+	}
 
 	return &RobertaForMaskedLM{
 		roberta: roberta,
 		lmHead:  lmHead,
-	}
+	}, nil
 }
 
 // Load loads model from file or model name. It also updates
 // default configuration parameters if provided.
 // This method implements `PretrainedModel` interface.
 func (mlm *RobertaForMaskedLM) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
-	var urlOrFilename string
-	// If modelName, infer to default configuration filename:
-	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
-		urlOrFilename = modelFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilename = modelNameOrPath
-	}
+	// var urlOrFilename string
+	// // If modelName, infer to default configuration filename:
+	// if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+	// urlOrFilename = modelFile
+	// } else {
+	// // Otherwise, just take the input
+	// urlOrFilename = modelNameOrPath
+	// }
 
-	cachedFile, err := util.CachedPath(urlOrFilename)
+	cachedFile, err := util.CachedPath(modelNameOrPath, "pytorch_model.bin")
 	if err != nil {
 		return err
 	}
@@ -98,10 +109,11 @@ func (mlm *RobertaForMaskedLM) Load(modelNameOrPath string, config interface{ pr
 	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
-	mlm.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
-	mlm.lmHead = NewRobertaLMHead(p.Sub("lm_head"), config.(*bert.BertConfig))
+	mlm.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig), false)
+	mlm.lmHead, err = NewRobertaLMHead(p.Sub("lm_head"), config.(*bert.BertConfig))
 
-	err = vs.Load(cachedFile)
+	// err = vs.Load(cachedFile)
+	err = pickle.LoadAll(vs, cachedFile)
 	if err != nil {
 		return err
 	}
@@ -112,35 +124,35 @@ func (mlm *RobertaForMaskedLM) Load(modelNameOrPath string, config interface{ pr
 // Forwad forwads pass through the model.
 //
 // Params:
-// 	+ `inputIds`: Optional input tensor of shape (batch size, sequence length).
-//		If None, pre-computed embeddings must be provided (see inputEmbeds).
-// 	+ `mask`: Optional mask of shape (batch size, sequence length).
-// 		Masked position have value 0, non-masked value 1. If None set to 1.
-// 	+ `tokenTypeIds`: Optional segment id of shape (batch size, sequence length).
-//		Convention is value of 0 for the first sentence (incl. </s>) and 1 for the
-//		second sentence. If None set to 0.
-// 	+ `positionIds`: Optional position ids of shape (batch size, sequence length).
-//		If None, will be incremented from 0.
-// 	+ `inputEmbeds`: Optional pre-computed input embeddings of shape (batch size,
-//		sequence length, hidden size). If None, input ids must be provided (see inputIds).
-// 	+ `encoderHiddenStates`: Optional encoder hidden state of shape (batch size,
-// 		encoder sequence length, hidden size). If the model is defined as a decoder and
-// 		the encoder hidden states is not None, used in the cross-attention layer as
-// 		keys and values (query from the decoder).
-// 	+ `encoderMask`: Optional encoder attention mask of shape (batch size, encoder sequence length).
-// 		If the model is defined as a decoder and the *encoder_hidden_states* is not None,
-// 		used to mask encoder values. Positions with value 0 will be masked.
-// 	+ `train`: boolean flag to turn on/off the dropout layers in the model.
-//		Should be set to false for inference.
+//   - `inputIds`: Optional input tensor of shape (batch size, sequence length).
+//     If None, pre-computed embeddings must be provided (see inputEmbeds).
+//   - `mask`: Optional mask of shape (batch size, sequence length).
+//     Masked position have value 0, non-masked value 1. If None set to 1.
+//   - `tokenTypeIds`: Optional segment id of shape (batch size, sequence length).
+//     Convention is value of 0 for the first sentence (incl. </s>) and 1 for the
+//     second sentence. If None set to 0.
+//   - `positionIds`: Optional position ids of shape (batch size, sequence length).
+//     If None, will be incremented from 0.
+//   - `inputEmbeds`: Optional pre-computed input embeddings of shape (batch size,
+//     sequence length, hidden size). If None, input ids must be provided (see inputIds).
+//   - `encoderHiddenStates`: Optional encoder hidden state of shape (batch size,
+//     encoder sequence length, hidden size). If the model is defined as a decoder and
+//     the encoder hidden states is not None, used in the cross-attention layer as
+//     keys and values (query from the decoder).
+//   - `encoderMask`: Optional encoder attention mask of shape (batch size, encoder sequence length).
+//     If the model is defined as a decoder and the *encoder_hidden_states* is not None,
+//     used to mask encoder values. Positions with value 0 will be masked.
+//   - `train`: boolean flag to turn on/off the dropout layers in the model.
+//     Should be set to false for inference.
 //
 // Returns:
-// 	+ `output`: tensor of shape (batch size, numLabels, vocab size)
-// 	+ `hiddenStates`: optional slice of tensors of length numHiddenLayers with shape
-// 		(batch size, sequence length, hidden size).
-// 	+ `attentions`:  optional slice of tensors of length num hidden layers with shape
-// 		(batch size, sequence length, hidden size).
-// 	+ `err`: error
-func (mlm *RobertaForMaskedLM) Forward(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask ts.Tensor, train bool) (output ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
+//   - `output`: tensor of shape (batch size, numLabels, vocab size)
+//   - `hiddenStates`: optional slice of tensors of length numHiddenLayers with shape
+//     (batch size, sequence length, hidden size).
+//   - `attentions`:  optional slice of tensors of length num hidden layers with shape
+//     (batch size, sequence length, hidden size).
+//   - `err`: error
+func (mlm *RobertaForMaskedLM) Forward(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask *ts.Tensor, train bool) (output *ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
 
 	hiddenState, _, allHiddenStates, allAttentions, err := mlm.roberta.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, encoderHiddenStates, encoderMask, train)
 
@@ -161,21 +173,21 @@ type RobertaClassificationHead struct {
 }
 
 // NewRobertaClassificationHead create a new RobertaClassificationHead.
-func NewRobertaClassificationHead(p nn.Path, config *bert.BertConfig) *RobertaClassificationHead {
+func NewRobertaClassificationHead(p *nn.Path, config *bert.BertConfig) *RobertaClassificationHead {
 	dense := nn.NewLinear(p.Sub("dense"), config.HiddenSize, config.HiddenSize, nn.DefaultLinearConfig())
 	numLabels := int64(len(config.Id2Label))
 	outProj := nn.NewLinear(p.Sub("out_proj"), config.HiddenSize, numLabels, nn.DefaultLinearConfig())
 	dropout := util.NewDropout(config.HiddenDropoutProb)
 
 	return &RobertaClassificationHead{
-		dense:   &dense,
+		dense:   dense,
 		dropout: dropout,
-		outProj: &outProj,
+		outProj: outProj,
 	}
 }
 
 // ForwardT forwards pass through model.
-func (ch *RobertaClassificationHead) ForwardT(hiddenStates ts.Tensor, train bool) ts.Tensor {
+func (ch *RobertaClassificationHead) ForwardT(hiddenStates *ts.Tensor, train bool) *ts.Tensor {
 	appliedDO1 := hiddenStates.MustSelect(1, 0, false).ApplyT(ch.dropout, train)
 	appliedDense := appliedDO1.Apply(ch.dense)
 	tanhTs := appliedDense.MustTanh(false)
@@ -198,8 +210,8 @@ type RobertaForSequenceClassification struct {
 }
 
 // NewRobertaForSequenceClassification creates a new RobertaForSequenceClassification model.
-func NewRobertaForSequenceClassification(p nn.Path, config *bert.BertConfig) *RobertaForSequenceClassification {
-	roberta := bert.NewBertModel(p.Sub("roberta"), config)
+func NewRobertaForSequenceClassification(p *nn.Path, config *bert.BertConfig) *RobertaForSequenceClassification {
+	roberta := bert.NewBertModel(p.Sub("roberta"), config, false)
 	classifier := NewRobertaClassificationHead(p.Sub("classifier"), config)
 
 	return &RobertaForSequenceClassification{
@@ -212,16 +224,16 @@ func NewRobertaForSequenceClassification(p nn.Path, config *bert.BertConfig) *Ro
 //
 // This method implements `PretrainedModel` interface.
 func (sc *RobertaForSequenceClassification) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
-	var urlOrFilename string
-	// If modelName, infer to default configuration filename:
-	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
-		urlOrFilename = modelFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilename = modelNameOrPath
-	}
+	// var urlOrFilename string
+	// // If modelName, infer to default configuration filename:
+	// if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+	// urlOrFilename = modelFile
+	// } else {
+	// // Otherwise, just take the input
+	// urlOrFilename = modelNameOrPath
+	// }
 
-	cachedFile, err := util.CachedPath(urlOrFilename)
+	cachedFile, err := util.CachedPath(modelNameOrPath, "pytorch_model.bin")
 	if err != nil {
 		return err
 	}
@@ -229,10 +241,11 @@ func (sc *RobertaForSequenceClassification) Load(modelNameOrPath string, config 
 	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
-	sc.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	sc.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig), false)
 	sc.classifier = NewRobertaClassificationHead(p.Sub("classifier"), config.(*bert.BertConfig))
 
-	err = vs.Load(cachedFile)
+	// err = vs.Load(cachedFile)
+	err = pickle.LoadAll(vs, cachedFile)
 	if err != nil {
 		return err
 	}
@@ -241,7 +254,7 @@ func (sc *RobertaForSequenceClassification) Load(modelNameOrPath string, config 
 }
 
 // Forward forwards pass through the model.
-func (sc *RobertaForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (labels ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
+func (sc *RobertaForSequenceClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds *ts.Tensor, train bool) (labels *ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
 
 	hiddenState, _, hiddenStates, attentions, err := sc.roberta.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
 	if err != nil {
@@ -266,15 +279,15 @@ type RobertaForMultipleChoice struct {
 }
 
 // NewRobertaForMultipleChoice creates a new RobertaForMultipleChoice model.
-func NewRobertaForMultipleChoice(p nn.Path, config *bert.BertConfig) *RobertaForMultipleChoice {
-	roberta := bert.NewBertModel(p.Sub("roberta"), config)
+func NewRobertaForMultipleChoice(p *nn.Path, config *bert.BertConfig) *RobertaForMultipleChoice {
+	roberta := bert.NewBertModel(p.Sub("roberta"), config, false)
 	dropout := util.NewDropout(config.HiddenDropoutProb)
 	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, 1, nn.DefaultLinearConfig())
 
 	return &RobertaForMultipleChoice{
 		roberta:    roberta,
 		dropout:    dropout,
-		classifier: &classifier,
+		classifier: classifier,
 	}
 }
 
@@ -282,16 +295,16 @@ func NewRobertaForMultipleChoice(p nn.Path, config *bert.BertConfig) *RobertaFor
 //
 // This method implements `PretrainedModel` interface.
 func (mc *RobertaForMultipleChoice) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
-	var urlOrFilename string
-	// If modelName, infer to default configuration filename:
-	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
-		urlOrFilename = modelFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilename = modelNameOrPath
-	}
+	// var urlOrFilename string
+	// // If modelName, infer to default configuration filename:
+	// if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+	// urlOrFilename = modelFile
+	// } else {
+	// // Otherwise, just take the input
+	// urlOrFilename = modelNameOrPath
+	// }
 
-	cachedFile, err := util.CachedPath(urlOrFilename)
+	cachedFile, err := util.CachedPath(modelNameOrPath, "pytorch_model.bin")
 	if err != nil {
 		return err
 	}
@@ -299,10 +312,10 @@ func (mc *RobertaForMultipleChoice) Load(modelNameOrPath string, config interfac
 	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
-	mc.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	mc.roberta = bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig), false)
 	mc.dropout = util.NewDropout(config.(*bert.BertConfig).HiddenDropoutProb)
 	classifier := nn.NewLinear(p.Sub("classifier"), config.(*bert.BertConfig).HiddenSize, 1, nn.DefaultLinearConfig())
-	mc.classifier = &classifier
+	mc.classifier = classifier
 
 	err = vs.Load(cachedFile)
 	if err != nil {
@@ -313,7 +326,7 @@ func (mc *RobertaForMultipleChoice) Load(modelNameOrPath string, config interfac
 }
 
 // ForwardT forwards pass through the model.
-func (mc *RobertaForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, positionIds ts.Tensor, train bool) (output ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
+func (mc *RobertaForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, positionIds *ts.Tensor, train bool) (output *ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
 
 	numChoices := inputIds.MustSize()[1]
 
@@ -338,7 +351,7 @@ func (mc *RobertaForMultipleChoice) ForwardT(inputIds, mask, tokenTypeIds, posit
 		flatMask = mask.MustView([]int64{-1, flatMaskSize[len(flatMaskSize)-1]}, false)
 	}
 
-	var pooledOutput ts.Tensor
+	var pooledOutput *ts.Tensor
 	_, pooledOutput, hiddenStates, attentions, err = mc.roberta.ForwardT(flatInputIds, flatMask, flatTokenTypeIds, flatPositionIds, ts.None, ts.None, ts.None, train)
 	if err != nil {
 		return ts.None, nil, nil, err
@@ -361,8 +374,8 @@ type RobertaForTokenClassification struct {
 }
 
 // NewRobertaForTokenClassification creates a new RobertaForTokenClassification model.
-func NewRobertaForTokenClassification(p nn.Path, config *bert.BertConfig) *RobertaForTokenClassification {
-	roberta := bert.NewBertModel(p.Sub("roberta"), config)
+func NewRobertaForTokenClassification(p *nn.Path, config *bert.BertConfig) *RobertaForTokenClassification {
+	roberta := bert.NewBertModel(p.Sub("roberta"), config, false)
 	dropout := util.NewDropout(config.HiddenDropoutProb)
 	numLabels := int64(len(config.Id2Label))
 	classifier := nn.NewLinear(p.Sub("classifier"), config.HiddenSize, numLabels, nn.DefaultLinearConfig())
@@ -370,7 +383,7 @@ func NewRobertaForTokenClassification(p nn.Path, config *bert.BertConfig) *Rober
 	return &RobertaForTokenClassification{
 		roberta:    roberta,
 		dropout:    dropout,
-		classifier: &classifier,
+		classifier: classifier,
 	}
 }
 
@@ -378,16 +391,16 @@ func NewRobertaForTokenClassification(p nn.Path, config *bert.BertConfig) *Rober
 //
 // This method implements `PretrainedModel` interface.
 func (tc *RobertaForTokenClassification) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
-	var urlOrFilename string
-	// If modelName, infer to default configuration filename:
-	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
-		urlOrFilename = modelFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilename = modelNameOrPath
-	}
+	// var urlOrFilename string
+	// // If modelName, infer to default configuration filename:
+	// if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+	// urlOrFilename = modelFile
+	// } else {
+	// // Otherwise, just take the input
+	// urlOrFilename = modelNameOrPath
+	// }
 
-	cachedFile, err := util.CachedPath(urlOrFilename)
+	cachedFile, err := util.CachedPath(modelNameOrPath, "pytorch_model.bin")
 	if err != nil {
 		return err
 	}
@@ -395,14 +408,14 @@ func (tc *RobertaForTokenClassification) Load(modelNameOrPath string, config int
 	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
-	roberta := bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	roberta := bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig), false)
 	dropout := util.NewDropout(config.(*bert.BertConfig).HiddenDropoutProb)
 	numLabels := int64(len(config.(*bert.BertConfig).Id2Label))
 	classifier := nn.NewLinear(p.Sub("classifier"), config.(*bert.BertConfig).HiddenSize, numLabels, nn.DefaultLinearConfig())
 
 	tc.roberta = roberta
 	tc.dropout = dropout
-	tc.classifier = &classifier
+	tc.classifier = classifier
 
 	err = vs.Load(cachedFile)
 	if err != nil {
@@ -413,7 +426,7 @@ func (tc *RobertaForTokenClassification) Load(modelNameOrPath string, config int
 }
 
 // ForwardT forwards pass through the model.
-func (tc *RobertaForTokenClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (output ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
+func (tc *RobertaForTokenClassification) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds *ts.Tensor, train bool) (output *ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
 	hiddenState, _, hiddenStates, attentions, err := tc.roberta.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
 	if err != nil {
 		return ts.None, nil, nil, err
@@ -434,14 +447,14 @@ type RobertaForQuestionAnswering struct {
 }
 
 // NewRobertaQuestionAnswering creates a new RobertaForQuestionAnswering model.
-func NewRobertaForQuestionAnswering(p nn.Path, config *bert.BertConfig) *RobertaForQuestionAnswering {
-	roberta := bert.NewBertModel(p.Sub("roberta"), config)
+func NewRobertaForQuestionAnswering(p *nn.Path, config *bert.BertConfig) *RobertaForQuestionAnswering {
+	roberta := bert.NewBertModel(p.Sub("roberta"), config, false)
 	numLabels := int64(2)
 	qaOutputs := nn.NewLinear(p.Sub("qa_outputs"), config.HiddenSize, numLabels, nn.DefaultLinearConfig())
 
 	return &RobertaForQuestionAnswering{
 		roberta:   roberta,
-		qaOutputs: &qaOutputs,
+		qaOutputs: qaOutputs,
 	}
 }
 
@@ -449,16 +462,16 @@ func NewRobertaForQuestionAnswering(p nn.Path, config *bert.BertConfig) *Roberta
 //
 // This method implements `PretrainedModel` interface.
 func (qa *RobertaForQuestionAnswering) Load(modelNameOrPath string, config interface{ pretrained.Config }, params map[string]interface{}, device gotch.Device) error {
-	var urlOrFilename string
-	// If modelName, infer to default configuration filename:
-	if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
-		urlOrFilename = modelFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilename = modelNameOrPath
-	}
+	// var urlOrFilename string
+	// // If modelName, infer to default configuration filename:
+	// if modelFile, ok := pretrained.RobertaModels[modelNameOrPath]; ok {
+	// urlOrFilename = modelFile
+	// } else {
+	// // Otherwise, just take the input
+	// urlOrFilename = modelNameOrPath
+	// }
 
-	cachedFile, err := util.CachedPath(urlOrFilename)
+	cachedFile, err := util.CachedPath(modelNameOrPath, "pytorch_model.bin")
 	if err != nil {
 		return err
 	}
@@ -466,12 +479,12 @@ func (qa *RobertaForQuestionAnswering) Load(modelNameOrPath string, config inter
 	vs := nn.NewVarStore(device)
 	p := vs.Root()
 
-	roberta := bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig))
+	roberta := bert.NewBertModel(p.Sub("roberta"), config.(*bert.BertConfig), false)
 	numLabels := int64(2)
 	qaOutputs := nn.NewLinear(p.Sub("qa_outputs"), config.(*bert.BertConfig).HiddenSize, numLabels, nn.DefaultLinearConfig())
 
 	qa.roberta = roberta
-	qa.qaOutputs = &qaOutputs
+	qa.qaOutputs = qaOutputs
 
 	err = vs.Load(cachedFile)
 	if err != nil {
@@ -482,7 +495,7 @@ func (qa *RobertaForQuestionAnswering) Load(modelNameOrPath string, config inter
 }
 
 // ForwadT forwards pass through the model.
-func (qa *RobertaForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds ts.Tensor, train bool) (startScores, endScores ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
+func (qa *RobertaForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds *ts.Tensor, train bool) (startScores, endScores *ts.Tensor, hiddenStates, attentions []ts.Tensor, err error) {
 	hiddenState, _, hiddenStates, attentions, err := qa.roberta.ForwardT(inputIds, mask, tokenTypeIds, positionIds, inputEmbeds, ts.None, ts.None, train)
 	if err != nil {
 		return ts.None, ts.None, nil, nil, err
@@ -490,8 +503,8 @@ func (qa *RobertaForQuestionAnswering) ForwardT(inputIds, mask, tokenTypeIds, po
 
 	sequenceOutput := hiddenState.Apply(qa.qaOutputs)
 	logits := sequenceOutput.MustSplit(1, -1, true)
-	startScores = logits[0].MustSqueeze1(-1, false)
-	endScores = logits[1].MustSqueeze1(-1, false)
+	startScores = logits[0].MustSqueezeDim(-1, false)
+	endScores = logits[1].MustSqueezeDim(-1, false)
 
 	for _, x := range logits {
 		x.MustDrop()
