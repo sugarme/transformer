@@ -6,23 +6,27 @@ import (
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/pickle"
+	"github.com/sugarme/gotch/ts"
 	"github.com/sugarme/tokenizer"
 	"github.com/sugarme/tokenizer/model/wordpiece"
 	"github.com/sugarme/tokenizer/normalizer"
 	"github.com/sugarme/tokenizer/pretokenizer"
 	"github.com/sugarme/tokenizer/processor"
 	"github.com/sugarme/transformer/bert"
+	"github.com/sugarme/transformer/util"
 )
 
 func main() {
-	// bertForMaskedLM()
-	bertForSequenceClassification()
+	bertForMaskedLM()
+	// bertForSequenceClassification()
 }
 
 func getBert() (retVal *tokenizer.Tokenizer) {
-
-	vocabFile := "../../data/bert/vocab.txt"
+	vocabFile, err := util.CachedPath("bert-base-uncased", "vocab.txt")
+	if err != nil {
+		panic(err)
+	}
 
 	model, err := wordpiece.NewWordPieceFromFile(vocabFile, "[UNK]")
 	if err != nil {
@@ -62,15 +66,29 @@ func getBert() (retVal *tokenizer.Tokenizer) {
 }
 
 func bertForMaskedLM() {
-
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../../data/bert/config.json")
+	configFile, err := util.CachedPath("bert-base-uncased", "config.json")
+	if err != nil {
+		panic(err)
+	}
+	config, err := bert.ConfigFromFile(configFile)
+	if err != nil {
+		panic(err)
+	}
 	// fmt.Printf("Bert Configuration:\n%+v\n", config)
 
-	model := bert.NewBertForMaskedLM(vs.Root(), config)
-	err := vs.Load("../../data/bert/model.ot")
+	model, err := bert.NewBertForMaskedLM(vs.Root(), config)
+	if err != nil {
+		panic(err)
+	}
+
+	modelFile, err := util.CachedPath("bert-base-uncased", "pytorch_model.bin")
+	if err != nil {
+		panic(err)
+	}
+	err = pickle.LoadAll(vs, modelFile)
 	if err != nil {
 		log.Fatalf("Load model weight error: \n%v", err)
 	}
@@ -108,19 +126,19 @@ func bertForMaskedLM() {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 	// inputTensor.Print()
 
-	var output ts.Tensor
+	var output *ts.Tensor
 	ts.NoGrad(func() {
 		output, _, _ = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, ts.None, ts.None, false)
 	})
 
-	index1 := output.MustGet(0).MustGet(4).MustArgmax(0, false, false).Int64Values()[0]
-	index2 := output.MustGet(1).MustGet(7).MustArgmax(0, false, false).Int64Values()[0]
+	index1 := output.MustGet(0).MustGet(4).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+	index2 := output.MustGet(1).MustGet(7).MustArgmax([]int64{0}, false, false).Int64Values()[0]
 
 	word1, ok := tk.IdToToken(int(index1))
 	if !ok {
@@ -139,7 +157,14 @@ func bertForSequenceClassification() {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config := bert.ConfigFromFile("../../data/bert/config.json")
+	configFile, err := util.CachedPath("bert-base-uncased", "config.json")
+	if err != nil {
+		panic(err)
+	}
+	config, err := bert.ConfigFromFile(configFile)
+	if err != nil {
+		panic(err)
+	}
 
 	var dummyLabelMap map[int64]string = make(map[int64]string)
 	dummyLabelMap[0] = "positive"
@@ -179,14 +204,14 @@ func bertForSequenceClassification() {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 	// inputTensor.Print()
 
 	var (
-		output                         ts.Tensor
+		output                         *ts.Tensor
 		allHiddenStates, allAttentions []ts.Tensor
 	)
 

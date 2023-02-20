@@ -1,7 +1,7 @@
 package util
 
 import (
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/ts"
 )
 
 type Dropout struct {
@@ -14,6 +14,6 @@ func NewDropout(p float64) *Dropout {
 	}
 }
 
-func (d *Dropout) ForwardT(input ts.Tensor, train bool) (retVal ts.Tensor) {
+func (d *Dropout) ForwardT(input *ts.Tensor, train bool) (retVal *ts.Tensor) {
 	return ts.MustDropout(input, d.dropoutProb, train)
 }

@@ -1,50 +1,32 @@
 package transformer_test
 
 import (
-	// "reflect"
-	"fmt"
+	"reflect"
 	"testing"
-
-	"github.com/sugarme/gotch"
 
 	"github.com/sugarme/transformer"
 	"github.com/sugarme/transformer/bert"
 )
 
-/*
- * // With model name
- * func TestModelFromPretrained_ModelName(t *testing.T) {
- *   modelName := "bert-base-uncased"
- *   var config *bert.BertConfig = new(bert.BertConfig)
- *   err := transformer.LoadConfig(config, modelName, nil)
- *   if err != nil {
- *     t.Error(err)
- *   }
- *
- *   wantVocabSize := int64(30522)
- *   gotVocabSize := config.VocabSize
- *
- *   if !reflect.DeepEqual(wantVocabSize, gotVocabSize) {
- *     t.Errorf("Want: %v\n", wantVocabSize)
- *     t.Errorf("Got: %v\n", gotVocabSize)
- *   }
- * }
- *  */
+// With model name
+func TestModelFromPretrained_ModelName(t *testing.T) {
+	modelName := "bert-base-uncased"
+	var config *bert.BertConfig = new(bert.BertConfig)
+	err := transformer.LoadConfig(config, modelName, nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	wantVocabSize := int64(30522)
+	gotVocabSize := config.VocabSize
+
+	if !reflect.DeepEqual(wantVocabSize, gotVocabSize) {
+		t.Errorf("Want: %v\n", wantVocabSize)
+		t.Errorf("Got: %v\n", gotVocabSize)
+	}
+}
 
 // With local file
-func TestModelFromPretrained_LocalFile(t *testing.T) {
-	var config *bert.BertConfig = new(bert.BertConfig)
-	if err := transformer.LoadConfig(config, "bert-base-uncased", nil); err != nil {
-		t.Error(err)
-	}
-
-	var model *bert.BertForMaskedLM = new(bert.BertForMaskedLM)
-	if err := transformer.LoadModel(model, "bert-base-uncased", config, nil, gotch.CPU); err != nil {
-		t.Error(err)
-	}
-
-	fmt.Printf("model: %+v\n", model)
-}
 
 /*
  * // No custom params

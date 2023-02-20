@@ -8,9 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-
-	"github.com/sugarme/transformer/pretrained"
-	"github.com/sugarme/transformer/util"
 )
 
 // BertConfig defines the BERT model architecture (i.e., number of layers,
@@ -97,22 +94,7 @@ func ConfigFromFile(filename string) (*BertConfig, error) {
 // default configuration parameters if provided.
 // This method implements `pretrained.Config` interface.
 func (c *BertConfig) Load(modelNameOrPath string, params map[string]interface{}) error {
-
-	var urlOrFilename string
-	// If modelName, infer to default configuration filename:
-	if configFile, ok := pretrained.BertConfigs[modelNameOrPath]; ok {
-		urlOrFilename = configFile
-	} else {
-		// Otherwise, just take the input
-		urlOrFilename = modelNameOrPath
-	}
-
-	cachedFile, err := util.CachedPath(urlOrFilename)
-	if err != nil {
-		return err
-	}
-
-	err = c.fromFile(cachedFile)
+	err := c.fromFile(modelNameOrPath)
 	if err != nil {
 		return err
 	}

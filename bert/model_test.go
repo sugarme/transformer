@@ -8,7 +8,8 @@ import (
 
 	"github.com/sugarme/gotch"
 	"github.com/sugarme/gotch/nn"
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/pickle"
+	"github.com/sugarme/gotch/ts"
 	"github.com/sugarme/tokenizer"
 	"github.com/sugarme/tokenizer/model/wordpiece"
 	"github.com/sugarme/tokenizer/normalizer"
@@ -16,10 +17,10 @@ import (
 	"github.com/sugarme/tokenizer/processor"
 
 	"github.com/sugarme/transformer/bert"
+	"github.com/sugarme/transformer/util"
 )
 
-func getBertTokenizer() (retVal *tokenizer.Tokenizer) {
-	vocabFile := "../data/bert/vocab.txt"
+func getBertTokenizer(vocabFile string) (retVal *tokenizer.Tokenizer) {
 	model, err := wordpiece.NewWordPieceFromFile(vocabFile, "[UNK]")
 	if err != nil {
 		log.Fatal(err)
@@ -59,21 +60,37 @@ func getBertTokenizer() (retVal *tokenizer.Tokenizer) {
 func TestBertForMaskedLM(t *testing.T) {
 	// Config
 	config := new(bert.BertConfig)
-	err := config.Load("../data/bert/config.json", nil)
+
+	configFile, err := util.CachedPath("bert-base-uncased", "config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = config.Load(configFile, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Model
 	device := gotch.CPU
+	vs := nn.NewVarStore(device)
 
-	model := new(bert.BertForMaskedLM)
-	err = model.Load("../data/bert/model.ot", config, nil, device)
+	model, err := bert.NewBertForMaskedLM(vs.Root(), config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	modelFile, err := util.CachedPath("bert-base-uncased", "pytorch_model.bin")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = pickle.LoadAll(vs, modelFile)
 	if err != nil {
 		t.Error(err)
 	}
 
-	tk := getBertTokenizer()
+	vocabFile, err := util.CachedPath("bert-base-uncased", "vocab.txt")
+	tk := getBertTokenizer(vocabFile)
 	sentence1 := "Looks like one [MASK] is missing"
 	sentence2 := "It was a very nice and [MASK] day"
 
@@ -100,18 +117,18 @@ func TestBertForMaskedLM(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
-	var output ts.Tensor
+	var output *ts.Tensor
 	ts.NoGrad(func() {
 		output, _, _ = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, ts.None, ts.None, false)
 	})
 
-	index1 := output.MustGet(0).MustGet(4).MustArgmax(0, false, false).Int64Values()[0]
-	index2 := output.MustGet(1).MustGet(7).MustArgmax(0, false, false).Int64Values()[0]
+	index1 := output.MustGet(0).MustGet(4).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+	index2 := output.MustGet(1).MustGet(7).MustArgmax([]int64{0}, false, false).Int64Values()[0]
 
 	got1, ok := tk.IdToToken(int(index1))
 	if !ok {
@@ -140,7 +157,11 @@ func TestBertForSequenceClassification(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	configFile, err := util.CachedPath("bert-base-uncased", "config.json")
+	if err != nil {
+		t.Error(err)
+	}
+	config, err := bert.ConfigFromFile(configFile)
 	if err != nil {
 		t.Error(err)
 	}
@@ -154,7 +175,9 @@ func TestBertForSequenceClassification(t *testing.T) {
 	config.OutputAttentions = true
 	config.OutputHiddenStates = true
 	model := bert.NewBertForSequenceClassification(vs.Root(), config)
-	tk := getBertTokenizer()
+
+	vocabFile, err := util.CachedPath("bert-base-uncased", "vocab.txt")
+	tk := getBertTokenizer(vocabFile)
 
 	// Define input
 	sentence1 := "Looks like one thing is missing"
@@ -182,13 +205,13 @@ func TestBertForSequenceClassification(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
 	var (
-		output                         ts.Tensor
+		output                         *ts.Tensor
 		allHiddenStates, allAttentions []ts.Tensor
 	)
 
@@ -221,7 +244,11 @@ func TestBertForMultipleChoice(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	configFile, err := util.CachedPath("bert-base-uncased", "config.json")
+	if err != nil {
+		t.Error(err)
+	}
+	config, err := bert.ConfigFromFile(configFile)
 	if err != nil {
 		t.Error(err)
 	}
@@ -229,7 +256,9 @@ func TestBertForMultipleChoice(t *testing.T) {
 	config.OutputAttentions = true
 	config.OutputHiddenStates = true
 	model := bert.NewBertForMultipleChoice(vs.Root(), config)
-	tk := getBertTokenizer()
+
+	vocabFile, err := util.CachedPath("bert-base-uncased", "vocab.txt")
+	tk := getBertTokenizer(vocabFile)
 
 	// Define input
 	sentence1 := "Looks like one thing is missing"
@@ -257,13 +286,13 @@ func TestBertForMultipleChoice(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true).MustUnsqueeze(0, true)
 
 	var (
-		output                         ts.Tensor
+		output                         *ts.Tensor
 		allHiddenStates, allAttentions []ts.Tensor
 	)
 
@@ -296,7 +325,11 @@ func TestBertForTokenClassification(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	configFile, err := util.CachedPath("bert-base-uncased", "config.json")
+	if err != nil {
+		t.Error(err)
+	}
+	config, err := bert.ConfigFromFile(configFile)
 	if err != nil {
 		t.Error(err)
 	}
@@ -311,7 +344,9 @@ func TestBertForTokenClassification(t *testing.T) {
 	config.OutputAttentions = true
 	config.OutputHiddenStates = true
 	model := bert.NewBertForTokenClassification(vs.Root(), config)
-	tk := getBertTokenizer()
+
+	vocabFile, err := util.CachedPath("bert-base-uncased", "vocab.txt")
+	tk := getBertTokenizer(vocabFile)
 
 	// Define input
 	sentence1 := "Looks like one thing is missing"
@@ -339,13 +374,13 @@ func TestBertForTokenClassification(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
 	var (
-		output                         ts.Tensor
+		output                         *ts.Tensor
 		allHiddenStates, allAttentions []ts.Tensor
 	)
 
@@ -378,7 +413,11 @@ func TestBertForQuestionAnswering(t *testing.T) {
 	device := gotch.CPU
 	vs := nn.NewVarStore(device)
 
-	config, err := bert.ConfigFromFile("../data/bert/config.json")
+	configFile, err := util.CachedPath("bert-base-uncased", "config.json")
+	if err != nil {
+		t.Error(err)
+	}
+	config, err := bert.ConfigFromFile(configFile)
 	if err != nil {
 		t.Error(err)
 	}
@@ -386,7 +425,9 @@ func TestBertForQuestionAnswering(t *testing.T) {
 	config.OutputAttentions = true
 	config.OutputHiddenStates = true
 	model := bert.NewForBertQuestionAnswering(vs.Root(), config)
-	tk := getBertTokenizer()
+
+	vocabFile, err := util.CachedPath("bert-base-uncased", "vocab.txt")
+	tk := getBertTokenizer(vocabFile)
 
 	// Define input
 	sentence1 := "Looks like one thing is missing"
@@ -414,13 +455,13 @@ func TestBertForQuestionAnswering(t *testing.T) {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
 	var (
-		startScores, endScores         ts.Tensor
+		startScores, endScores         *ts.Tensor
 		allHiddenStates, allAttentions []ts.Tensor
 	)
 

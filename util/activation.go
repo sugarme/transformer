@@ -1,13 +1,13 @@
 package util
 
 import (
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/ts"
 )
 
 // ActivationFn is an activation function.
 type ActivationFn interface {
 	// Fwd is a forward pass through x.
-	Fwd(x ts.Tensor) ts.Tensor
+	Fwd(x *ts.Tensor) *ts.Tensor
 	Name() string
 }
 
@@ -24,7 +24,7 @@ func NewRelu() ReluActivation {
 	return ReluActivation{"relu"}
 }
 
-func (r ReluActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (r ReluActivation) Fwd(x *ts.Tensor) (retVal *ts.Tensor) {
 	return x.MustRelu(false)
 }
 
@@ -45,7 +45,7 @@ func NewGelu() GeluActivation {
 	return GeluActivation{"gelu"}
 }
 
-func (g GeluActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (g GeluActivation) Fwd(x *ts.Tensor) (retVal *ts.Tensor) {
 	return x.MustGelu(false)
 }
 
@@ -66,7 +66,7 @@ func NewTanh() TanhActivation {
 	return TanhActivation{"tanh"}
 }
 
-func (t TanhActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (t TanhActivation) Fwd(x *ts.Tensor) (retVal *ts.Tensor) {
 	return x.MustTanh(false)
 }
 
@@ -87,7 +87,7 @@ func NewSwish() SwishActivation {
 	return SwishActivation{"swish"}
 }
 
-func (s SwishActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (s SwishActivation) Fwd(x *ts.Tensor) (retVal *ts.Tensor) {
 	return x.Swish()
 }
 
@@ -108,7 +108,7 @@ func NewMish() MishActivation {
 	return MishActivation{"mish"}
 }
 
-func (m MishActivation) Fwd(x ts.Tensor) (retVal ts.Tensor) {
+func (m MishActivation) Fwd(x *ts.Tensor) (retVal *ts.Tensor) {
 	softplus := x.MustSoftplus(false)
 	tanh := softplus.MustTanh(true)
 	retVal = x.MustMm(tanh, false)
@@ -120,7 +120,7 @@ func (m MishActivation) Name() (retVal string) {
 	return m.name
 }
 
-func geluNew(xs ts.Tensor) (retVal ts.Tensor) {
+func geluNew(xs *ts.Tensor) (retVal *ts.Tensor) {
 	// TODO: implement
 	// x * 0.5 * (((x.pow(3.0f64) * 0.044715 + x) * ((2f64 / PI).sqrt())).tanh() + 1)
 	return retVal

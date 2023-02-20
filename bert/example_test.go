@@ -5,30 +5,47 @@ import (
 	"log"
 
 	"github.com/sugarme/gotch"
-	ts "github.com/sugarme/gotch/tensor"
+	"github.com/sugarme/gotch/nn"
+	"github.com/sugarme/gotch/pickle"
+	"github.com/sugarme/gotch/ts"
 	"github.com/sugarme/tokenizer"
 
 	"github.com/sugarme/transformer/bert"
+	"github.com/sugarme/transformer/util"
 )
 
 func ExampleBertForMaskedLM() {
 	// Config
+	configFile, err := util.CachedPath("bert-base-uncased", "config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
 	config := new(bert.BertConfig)
-	err := config.Load("../data/bert/config.json", nil)
+	err = config.Load(configFile, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Model
 	device := gotch.CPU
+	vs := nn.NewVarStore(device)
 
 	model := new(bert.BertForMaskedLM)
-	err = model.Load("../data/bert/model.ot", config, nil, device)
+
+	modelFile, err := util.CachedPath("bert-base-uncased", "pytorch_model.bin")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = pickle.LoadAll(vs, modelFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	tk := getBertTokenizer()
+	vocabFile, err := util.CachedPath("bert-base-uncased", "vocab.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tk := getBertTokenizer(vocabFile)
 	sentence1 := "Looks like one [MASK] is missing"
 	sentence2 := "It was a very nice and [MASK] day"
 
@@ -55,18 +72,18 @@ func ExampleBertForMaskedLM() {
 			tokInput[i] = int64(en.Ids[i])
 		}
 
-		tensors = append(tensors, ts.TensorFrom(tokInput))
+		tensors = append(tensors, *ts.TensorFrom(tokInput))
 	}
 
 	inputTensor := ts.MustStack(tensors, 0).MustTo(device, true)
 
-	var output ts.Tensor
+	var output *ts.Tensor
 	ts.NoGrad(func() {
 		output, _, _ = model.ForwardT(inputTensor, ts.None, ts.None, ts.None, ts.None, ts.None, ts.None, false)
 	})
 
-	index1 := output.MustGet(0).MustGet(4).MustArgmax(0, false, false).Int64Values()[0]
-	index2 := output.MustGet(1).MustGet(7).MustArgmax(0, false, false).Int64Values()[0]
+	index1 := output.MustGet(0).MustGet(4).MustArgmax([]int64{0}, false, false).Int64Values()[0]
+	index2 := output.MustGet(1).MustGet(7).MustArgmax([]int64{0}, false, false).Int64Values()[0]
 
 	got1, ok := tk.IdToToken(int(index1))
 	if !ok {
